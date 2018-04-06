@@ -62,7 +62,7 @@ class Facet3D(object):
             for c1, c2 in ziplong(cl1[i], cl2[i]):
                 if c1 is None:
                     return -1
-                val = c1.__cmp__(c2)
+                val = (c1 > c2) - (c1 < c2)
                 if val != 0:
                     return val
         return 0
@@ -119,14 +119,18 @@ class Facet3D(object):
         maxz = max([v[2] for v in self.vertices])
         return z >= minz and z <= maxz
 
-    def slice_at_z(self, z):
-        minz = min([v[2] for v in self.vertices])
-        maxz = max([v[2] for v in self.vertices])
+    def z_range(self):
+        allz = [v[2] for v in self.vertices]
+        return (min(allz), max(allz))
+
+    def slice_at_z(self, z, quanta=1e-3):
+        z = math.floor(z / quanta + 0.5) * quanta + quanta/2
+        minz, maxz = self.z_range()
         if z < minz:
             return None
         if z > maxz:
             return None
-        if self.norm[0:2] == (0.0, 0.0):
+        if math.hypot(self.norm[0], self.norm[1]) < 1e-6:
             return None
         norm2d = self.norm[0:2]
         vl = self.vertices

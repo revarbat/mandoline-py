@@ -30,6 +30,8 @@ def main():
                         action="store_true")
     parser.add_argument('-s', '--slice-to-file',
                         help='Slice and write g-code to file.')
+    parser.add_argument('-j', '--threads', type=int, default=-1,
+                        help='Number of threads to slice with. (default: 4 x #CPUs)')
     parser.add_argument('infile', help='Input STL filename.')
     args = parser.parse_args()
 
@@ -66,7 +68,7 @@ def main():
     if args.slice_to_file:
         from mandoline.slicer import Slicer
         slicer = Slicer(stl)
-        slicer.slice_to_file(args.slice_to_file)
+        slicer.slice_to_file(args.slice_to_file, threads=args.threads)
 
     sys.exit(0)
 

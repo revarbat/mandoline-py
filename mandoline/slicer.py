@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import sys
 import math
 import multiprocessing
@@ -5,7 +7,7 @@ import multiprocessing
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
-from tkinter import (Tk, Canvas, ROUND, NW, ALL, mainloop)
+from tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
 
 import pyclipper
 
@@ -118,7 +120,7 @@ class Slicer(object):
             if key in self.conf:
                 self.conf[key] = val
 
-    def slice_to_file(self, filename):
+    def slice_to_file(self, filename, threads=-1):
         print("Slicing start")
         layer_h = self.conf['layer_height']
         dflt_nozl = self.conf['default_nozzle']
@@ -138,12 +140,15 @@ class Slicer(object):
         self.support_width = supp_nozl_d * self.extrusion_ratio
         height = self.model.points.maxz - self.model.points.minz
         layer_cnt = math.floor(height / layer_h)
+        self.model.assign_layers(layer_h)
         self.layer_zs = [
             self.model.points.minz + layer_h * (layer + 1)
             for layer in range(layer_cnt)
         ]
-        cpus = multiprocessing.cpu_count()
-        with ThreadPoolExecutor(max_workers=cpus*4) as ex:
+        if threads <= 0:
+            threads = 4 * multiprocessing.cpu_count()
+        # print('<tkcad formatversion="1.1" units="inches" showfractions="YES" material="Aluminum">', file=sys.stderr)
+        with ThreadPoolExecutor(max_workers=threads) as ex:
             print("Cut")
             self.layer_paths = list(ex.map(self._cut_task, self.layer_zs))
 
@@ -247,6 +252,7 @@ class Slicer(object):
                 for line in self._paths_gcode(self.sparse_infill[slicenum], self.infill_width, infl_nozl, self.layer_zs[layer]):
                     f.write(line)
 
+        # print('</tkcad>', file=sys.stderr)
         self._display_paths()
         # TODO: Route paths
         # TODO: No retraction and hop for short paths
@@ -274,7 +280,8 @@ class Slicer(object):
     ############################################################
 
     def _cut_task(self, z):
-        paths = self.model.slice_at_z(z - self.conf['layer_height']/2.0)
+        layer_h = self.conf['layer_height']
+        paths = self.model.slice_at_z(z - layer_h/2, layer_h)
         return self._union(paths, [])
 
     def _perimeter_task(self, layer):
@@ -320,7 +327,6 @@ class Slicer(object):
         lines = self._make_infill_lines(base_ang, 1.0)
         clipped_lines = []
         for line in lines:
-            print("solid clipping", line, file=sys.stderr)
             clipped_lines.extend(self._clip([line], solid_mask, subj_closed=False))
         return clipped_lines
 
@@ -352,7 +358,6 @@ class Slicer(object):
             lines = []
         clipped_lines = []
         for line in lines:
-            print("clipping", line, file=sys.stderr)
             clipped_lines.extend(self._clip([line], mask, subj_closed=False))
         return clipped_lines
 
@@ -606,6 +611,7 @@ class Slicer(object):
     ############################################################
 
     def _offset(self, paths, amount):
+        # print("_offset(\n  paths={},\n  amount={}\n)\n\n".format(paths, amount), file=sys.stderr);
         pco = pyclipper.PyclipperOffset()
         paths = pyclipper.scale_to_clipper(paths, self.SCALING_FACTOR)
         pco.AddPaths(paths, pyclipper.JT_MITER, pyclipper.ET_CLOSEDPOLYGON)
@@ -614,6 +620,7 @@ class Slicer(object):
         return outpaths
 
     def _union(self, paths1, paths2):
+        # print("_union(\n  paths1={},\n  paths2={}\n)\n\n".format(paths1, paths2), file=sys.stderr);
         pc = pyclipper.Pyclipper()
         if paths1:
             if paths1[0][0] in (int, float):
@@ -630,6 +637,7 @@ class Slicer(object):
         return outpaths
 
     def _diff(self, subj, clip_paths, subj_closed=True):
+        # print("_diff(\n  subj={},\n  clip_paths={}\n  subj_closed={}\n)\n\n".format(subj, clip_paths, subj_closed), file=sys.stderr);
         pc = pyclipper.Pyclipper()
         if subj:
             subj = pyclipper.scale_to_clipper(subj, self.SCALING_FACTOR)
@@ -642,6 +650,7 @@ class Slicer(object):
         return outpaths
 
     def _clip(self, subj, clip_paths, subj_closed=True):
+        # print("_clip(\n  subj={},\n  clip_paths={}\n  subj_closed={}\n)\n\n".format(subj, clip_paths, subj_closed), file=sys.stderr);
         pc = pyclipper.Pyclipper()
         if subj:
             subj = pyclipper.scale_to_clipper(subj, self.SCALING_FACTOR)
@@ -676,20 +685,20 @@ class Slicer(object):
     def _display_paths(self):
         self.layer = 0
         self.mag = 5.0
-        master = Tk()
-        self.canvas = Canvas(master, width=800, height=600)
-        self.canvas.pack()
+        self.master = Tk()
+        self.canvas = Canvas(self.master, width=800, height=600)
+        self.canvas.pack(fill=BOTH, expand=1)
         self.canvas.focus()
-        master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
-        master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
-        master.bind("<Key-equal>", lambda e: self._zoom(incdec=1))
-        master.bind("<Key-minus>", lambda e: self._zoom(incdec=-1))
-        master.bind("<Key-1>", lambda e: self._zoom(val= 5.0))
-        master.bind("<Key-2>", lambda e: self._zoom(val=10.0))
-        master.bind("<Key-3>", lambda e: self._zoom(val=15.0))
-        master.bind("<Key-4>", lambda e: self._zoom(val=20.0))
-        master.bind("<Key-q>", lambda e: sys.exit(0))
-        master.bind("<Key-Escape>", lambda e: sys.exit(0))
+        self.master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
+        self.master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
+        self.master.bind("<Key-equal>", lambda e: self._zoom(incdec=1))
+        self.master.bind("<Key-minus>", lambda e: self._zoom(incdec=-1))
+        self.master.bind("<Key-1>", lambda e: self._zoom(val= 5.0))
+        self.master.bind("<Key-2>", lambda e: self._zoom(val=10.0))
+        self.master.bind("<Key-3>", lambda e: self._zoom(val=15.0))
+        self.master.bind("<Key-4>", lambda e: self._zoom(val=20.0))
+        self.master.bind("<Key-q>", lambda e: sys.exit(0))
+        self.master.bind("<Key-Escape>", lambda e: sys.exit(0))
         self._redraw_paths()
         mainloop()
 
@@ -719,6 +728,10 @@ class Slicer(object):
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
         ptcache = self.model.points
+        wincx = self.master.winfo_width() / 2
+        wincy = self.master.winfo_height() / 2
+        wincx = wincx if wincx > 1 else 400
+        wincy = wincy if wincy > 1 else 300
         minx = ptcache.minx
         maxx = ptcache.maxx
         miny = ptcache.miny
@@ -726,7 +739,7 @@ class Slicer(object):
         cx = (maxx + minx)/2.0
         cy = (maxy + miny)/2.0
         for pathnum, path in enumerate(paths):
-            path = [(400+(x-cx)*self.mag, 300+(y-cy)*self.mag) for x, y in path]
+            path = [(wincx+(x-cx)*self.mag, wincy+(cy-y)*self.mag) for x, y in path]
             color = colors[(pathnum + offset) % len(colors)]
             self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle=ROUND, joinstyle=ROUND)
 
