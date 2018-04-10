@@ -211,7 +211,8 @@ class StlData(object):
 
     def get_overhang_footprint_triangles(self, ang=45, z=None):
         out = []
-        for facet in self.facets:
+        facets = self.facets if z is None else self.get_layer_facets(z)
+        for facet in facets:
             if facet.overhang_angle() < ang:
                 continue
             if z is not None and not facet.intersects_z(z):
