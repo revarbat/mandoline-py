@@ -10,7 +10,7 @@ def offset(paths, amount):
     pco = pyclipper.PyclipperOffset()
     pco.ArcTolerance = SCALING_FACTOR / 40
     paths = pyclipper.scale_to_clipper(paths, SCALING_FACTOR)
-    pco.AddPaths(paths, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
+    pco.AddPaths(paths, pyclipper.JT_MITER, pyclipper.ET_CLOSEDPOLYGON)
     outpaths = pco.Execute(amount * SCALING_FACTOR)
     outpaths = pyclipper.scale_from_clipper(outpaths, SCALING_FACTOR)
     return outpaths

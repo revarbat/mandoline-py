@@ -78,7 +78,7 @@ class StlData(object):
                         continue  # zero area facet.  Skip to next facet.
                     vec1 = Vector(vertex1) - Vector(vertex2)
                     vec2 = Vector(vertex3) - Vector(vertex2)
-                    if vec1.angle(vec2) < 1e8:
+                    if vec1.angle(vec2) < 1e-8:
                         continue  # zero area facet.  Skip to next facet.
             except StlEndOfFileException:
                 return None
@@ -100,12 +100,10 @@ class StlData(object):
             vertex2 = self.quantz(vertex2, quanta)
             vertex3 = self.quantz(vertex3, quanta)
             if vertex1 == vertex2 or vertex2 == vertex3 or vertex3 == vertex1:
-                print("X!")
                 return None
             vec1 = Vector(vertex1) - Vector(vertex2)
             vec2 = Vector(vertex3) - Vector(vertex2)
             if vec1.angle(vec2) < 1e-8:
-                print("Y!")
                 return None
         v1 = self.points.add(*vertex1)
         v2 = self.points.add(*vertex2)
@@ -292,11 +290,6 @@ class StlData(object):
             if key1 not in paths:
                 paths[key1] = []
             paths[key1].append(path)
-        # if deadpaths:
-        #    print('<layer name="Z{:.1f}">'.format(z), file=sys.stderr)
-        #    for path in deadpaths:
-        #        print('<cadobject type="LINE" coords="{}" />'.format(" ".join(["%s" % x for pt in path for x in pt])), file=sys.stderr)
-        #    print('</layer>', file=sys.stderr)
         return outpaths
 
 

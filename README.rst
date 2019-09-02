@@ -11,9 +11,9 @@ printer to print the object.
 Installation
 ============
 
-Install using PyPi::
+Install using PyPi (NOT IMPLEMENTED YET)::
 
-    pip install pymuv
+    pip install mandoline-py
 
 Installing from sources::
 

@@ -146,10 +146,11 @@ class Slicer(object):
             self.model.points.minz + layer_h * (layer + 1)
             for layer in range(layer_cnt)
         ]
-        if threads <= 0:
-            threads = multiprocessing.cpu_count() * 2
 
         # print('<tkcad formatversion="1.1" units="inches" showfractions="YES" material="Aluminum">', file=sys.stderr)
+        chunksize = 20
+        if threads <= 0:
+            threads = multiprocessing.cpu_count()
         executor = ThreadPoolExecutor if threads == 1 else ProcessPoolExecutor
         with executor(max_workers=threads) as ex:
             print("Stage 1: Perimeters")
@@ -167,11 +168,12 @@ class Slicer(object):
                         [layer_h] * layer_cnt,
                         [self.conf] * layer_cnt,
                         [self.model] * layer_cnt,
-                        chunksize=20
+                        chunksize=chunksize
                     )
                 )
             )
 
+        with executor(max_workers=threads) as ex:
             print("Stage 2: Generate Masks")
             overhang_future = ex.submit(
                 Slicer._slicer_task_2a,
@@ -188,13 +190,14 @@ class Slicer(object):
                         [([] if i < 1 else self.perimeter_paths[i-1][-1]) for i in range(layer_cnt)],
                         [p[-1] for p in self.perimeter_paths],
                         [([] if i >= layer_cnt-1 else self.perimeter_paths[i+1][-1]) for i in range(layer_cnt)],
-                        chunksize=20
+                        chunksize=chunksize
                     )
                 )
             )
 
             overhang_drops = overhang_future.result()
 
+        with executor(max_workers=threads) as ex:
             print("Stage 3: Support & Raft")
             (
                 self.support_outline,
@@ -207,12 +210,13 @@ class Slicer(object):
                         [self.conf] * layer_cnt,
                         [self.support_width] * layer_cnt,
                         overhang_drops,
-                        chunksize=20
+                        chunksize=chunksize
                     )
                 )
             )
             del overhang_drops
 
+        with executor(max_workers=threads) as ex:
             print("Stage 4: Path Generation")
             self.future_raft = ex.submit(
                 self._slicer_task_4a,
@@ -238,7 +242,7 @@ class Slicer(object):
                         [top_masks[i : i+top_cnt] for i in range(layer_cnt)],
                         [bot_masks[max(0, i-bot_cnt+1) : i+1] for i in range(layer_cnt)],
                         self.perimeter_paths,
-                        chunksize=20
+                        chunksize=chunksize
                     )
                 )
             )
@@ -258,7 +262,7 @@ class Slicer(object):
         for i in range(raft_layers):
             self.layer_zs.append(self.layer_zs[-1]+self.conf[layer_height])
 
-        print("Gcode")
+        print("Gcode Generation")
         with open(filename, "w") as f:
             f.write("( raft_outline )\n")
             outline = geom.close_paths(self.raft_outline)
@@ -464,9 +468,12 @@ class Slicer(object):
         minloops = conf['skirt_loops']
         minlen = conf['skirt_min_len']
         skirt = geom.offset(layer_paths, brim_w + skirt_w + ewidth/2.0)
-        plen = sum(
-            sum([math.hypot(p2[0]-p1[0], p2[1]-p1[1]) for p1, p2 in zip(path, path[1:]+path[0:1])])
-            for path in skirt
+        plen = max(
+            1.0,
+            sum(
+                sum([math.hypot(p2[0]-p1[0], p2[1]-p1[1]) for p1, p2 in zip(path, path[1:]+path[0:1])])
+                for path in skirt
+            )
         )
         loops = minloops
         if adhesion != "Raft":
@@ -484,6 +491,7 @@ class Slicer(object):
 
     @staticmethod
     def _slicer_task_4b(layer, ewidth, iwidth, conf, top_masks, bot_masks, perims):
+        print("Start layer={0}".format(layer))
         # Solid Mask
         outmask = []
         for mask in top_masks:

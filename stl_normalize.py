@@ -41,11 +41,12 @@ def main():
     stl = StlData()
     stl.read_file(args.infile)
     if args.verbose:
-        print("Read {0} ({1:.1f} x {2:.1f} x {3:.1f})".format(
+        print("Read {0} ({4} facets, {1:.1f} x {2:.1f} x {3:.1f})".format(
             args.infile,
             stl.points.maxx - stl.points.minx,
             stl.points.maxy - stl.points.miny,
             stl.points.maxz - stl.points.minz,
+            len(stl.facets),
         ))
 
     manifold = True
@@ -63,9 +64,10 @@ def main():
     if args.outfile:
         stl.write_file(args.outfile, binary=args.write_binary)
         if args.verbose:
-            print("Wrote {0} ({1})".format(
+            print("Wrote {0} ({1}, {2} facets)".format(
                 args.outfile,
                 ("binary" if args.write_binary else "ASCII"),
+                len(stl.facets),
             ))
 
     if args.slice_to_file:
