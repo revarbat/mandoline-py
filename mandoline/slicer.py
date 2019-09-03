@@ -5,7 +5,6 @@ import math
 import multiprocessing
 
 from collections import OrderedDict
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 from tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
 
