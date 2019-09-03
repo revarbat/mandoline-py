@@ -10,7 +10,7 @@ def main():
                         action="store_true")
     parser.add_argument('-o', '--outfile',
                         help='Slices STL and write GCode to file.')
-    parser.add_argument('-g', '--show-gui',
+    parser.add_argument('-g', '--gui-display',
                         help='Show sliced paths output in GUI.',
                         action="store_true")
     parser.add_argument('-y', '--slice-anyways',
@@ -40,8 +40,9 @@ def main():
     if args.outfile:
         from mandoline.slicer import Slicer
         slicer = Slicer(stl)
-        slicer.slice_to_file(args.outfile, showgui=args.show_gui, threads=1)
+        slicer.slice_to_file(args.outfile, showgui=args.gui_display, threads=1)
 
     sys.exit(0)
+
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap
