@@ -225,8 +225,8 @@ class StlData(object):
         self.layer_facets = {}
         for facet in self.facets:
             minz, maxz = facet.z_range()
-            minl = math.floor(minz / layer_height + 0.01)
-            maxl = math.ceil(maxz / layer_height - 0.01)
+            minl = int(math.floor(minz / layer_height + 0.01))
+            maxl = int(math.ceil(maxz / layer_height - 0.01))
             for layer in range(minl, maxl + 1):
                 if layer not in self.layer_facets:
                     self.layer_facets[layer] = []

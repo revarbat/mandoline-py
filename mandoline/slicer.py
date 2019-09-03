@@ -2,11 +2,12 @@ from __future__ import print_function
 
 import sys
 import math
-import multiprocessing
-
 from collections import OrderedDict
 
-from tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
+try:  # Python 2
+    from Tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
+except ImportError:  # Python 3
+    from tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
 
 import mandoline.geometry2d as geom
 
@@ -139,7 +140,7 @@ class Slicer(object):
         self.infill_width = infl_nozl_d * self.extrusion_ratio
         self.support_width = supp_nozl_d * self.extrusion_ratio
         height = self.model.points.maxz - self.model.points.minz
-        layer_cnt = math.floor(height / layer_h)
+        layer_cnt = int(height / layer_h)
         self.model.assign_layers(layer_h)
         self.layer_zs = [
             self.model.points.minz + layer_h * (layer + 1)

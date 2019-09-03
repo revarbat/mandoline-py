@@ -145,7 +145,7 @@ def make_infill_pat(rect, baseang, spacing, rots):
     cx = (maxx + minx)/2.0
     cy = (maxy + miny)/2.0
     r = max(w, h) * math.sqrt(2.0)
-    n = math.ceil(r / spacing)
+    n = int(math.ceil(r / spacing))
     out = []
     for rot in rots:
         s = math.sin((baseang+rot)*math.pi/180.0)
