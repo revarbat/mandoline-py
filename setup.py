@@ -4,7 +4,7 @@ import os
 import glob
 from setuptools import setup
 
-VERSION = "0.8.0"
+VERSION = "0.8.1"
 
 
 def find_data_files(source, target, patterns):
@@ -52,13 +52,18 @@ setup(
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
-        'Intended Audience :: Developers',
+        'Environment :: Console',
+        'Intended Audience :: End Users/Desktop',
+        'Intended Audience :: Manufacturing',
+        'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
+        'Natural Language :: English',
         'Operating System :: MacOS :: MacOS X',
         'Operating System :: Microsoft :: Windows',
         'Operating System :: POSIX',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3',
+        'Topic :: Multimedia :: Graphics :: 3D Modeling',
     ],
     keywords='stl gcode slicer 3dprinting',
     entry_points={
