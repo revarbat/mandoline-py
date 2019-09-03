@@ -17,6 +17,10 @@ def offset(paths, amount):
 
 
 def union(paths1, paths2):
+    if not paths1:
+        return paths2
+    if not paths2:
+        return paths1
     pc = pyclipper.Pyclipper()
     if paths1:
         if paths1[0][0] in (int, float):
@@ -28,12 +32,20 @@ def union(paths1, paths2):
             raise pyclipper.ClipperException()
         paths2 = pyclipper.scale_to_clipper(paths2, SCALING_FACTOR)
         pc.AddPaths(paths2, pyclipper.PT_CLIP, True)
-    outpaths = pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_EVENODD, pyclipper.PFT_EVENODD)
+    try:
+        outpaths = pc.Execute(pyclipper.CT_UNION, pyclipper.PFT_EVENODD, pyclipper.PFT_EVENODD)
+    except:
+        print("paths1={}".format(paths1))
+        print("paths2={}".format(paths2))
     outpaths = pyclipper.scale_from_clipper(outpaths, SCALING_FACTOR)
     return outpaths
 
 
 def diff(subj, clip_paths, subj_closed=True):
+    if not subj:
+        return []
+    if not clip_paths:
+        return subj
     pc = pyclipper.Pyclipper()
     if subj:
         subj = pyclipper.scale_to_clipper(subj, SCALING_FACTOR)
@@ -47,6 +59,10 @@ def diff(subj, clip_paths, subj_closed=True):
 
 
 def clip(subj, clip_paths, subj_closed=True):
+    if not subj:
+        return []
+    if not clip_paths:
+        return []
     pc = pyclipper.Pyclipper()
     if subj:
         subj = pyclipper.scale_to_clipper(subj, SCALING_FACTOR)

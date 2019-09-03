@@ -148,115 +148,97 @@ class Slicer(object):
         ]
 
         # print('<tkcad formatversion="1.1" units="inches" showfractions="YES" material="Aluminum">', file=sys.stderr)
-        chunksize = 20
-        if threads <= 0:
-            threads = multiprocessing.cpu_count()
-        executor = ThreadPoolExecutor if threads == 1 else ProcessPoolExecutor
-        with executor(max_workers=threads) as ex:
-            print("Stage 1: Perimeters")
-            (
-                self.layer_paths,
-                self.overhang_masks,
-                self.perimeter_paths
-            ) = zip(
-                *list(
-                    ex.map(
-                        Slicer._slicer_task_1,
-                        self.layer_zs,
-                        [self.extrusion_width] * layer_cnt,
-                        [self.support_width] * layer_cnt,
-                        [layer_h] * layer_cnt,
-                        [self.conf] * layer_cnt,
-                        [self.model] * layer_cnt,
-                        chunksize=chunksize
-                    )
+        print("Stage 1: Perimeters")
+        (
+            self.layer_paths,
+            self.overhang_masks,
+            self.perimeter_paths
+        ) = zip(
+            *list(
+                map(
+                    Slicer._slicer_task_1,
+                    self.layer_zs,
+                    [self.extrusion_width] * layer_cnt,
+                    [self.support_width] * layer_cnt,
+                    [layer_h] * layer_cnt,
+                    [self.conf] * layer_cnt,
+                    [self.model] * layer_cnt
                 )
             )
+        )
 
-        with executor(max_workers=threads) as ex:
-            print("Stage 2: Generate Masks")
-            overhang_future = ex.submit(
-                Slicer._slicer_task_2a,
-                self.conf,
-                self.overhang_masks,
-                self.layer_paths
-            )
+        print("Stage 2: Generate Masks")
+        overhang_drops = Slicer._slicer_task_2a(
+            self.conf,
+            self.overhang_masks,
+            self.layer_paths
+        )
 
-            top_masks, bot_masks = zip(
-                *list(
-                    ex.map(
-                        Slicer._slicer_task_2b,
-                        range(layer_cnt),
-                        [([] if i < 1 else self.perimeter_paths[i-1][-1]) for i in range(layer_cnt)],
-                        [p[-1] for p in self.perimeter_paths],
-                        [([] if i >= layer_cnt-1 else self.perimeter_paths[i+1][-1]) for i in range(layer_cnt)],
-                        chunksize=chunksize
-                    )
+        top_masks, bot_masks = zip(
+            *list(
+                map(
+                    Slicer._slicer_task_2b,
+                    range(layer_cnt),
+                    [([] if i < 1 else self.perimeter_paths[i-1][-1]) for i in range(layer_cnt)],
+                    [p[-1] for p in self.perimeter_paths],
+                    [([] if i >= layer_cnt-1 else self.perimeter_paths[i+1][-1]) for i in range(layer_cnt)]
                 )
             )
+        )
 
-            overhang_drops = overhang_future.result()
-
-        with executor(max_workers=threads) as ex:
-            print("Stage 3: Support & Raft")
-            (
-                self.support_outline,
-                self.support_infill
-            ) = zip(
-                *list(
-                    ex.map(
-                        Slicer._slicer_task_3b,
-                        range(layer_cnt),
-                        [self.conf] * layer_cnt,
-                        [self.support_width] * layer_cnt,
-                        overhang_drops,
-                        chunksize=chunksize
-                    )
+        print("Stage 3: Support & Raft")
+        (
+            self.support_outline,
+            self.support_infill
+        ) = zip(
+            *list(
+                map(
+                    Slicer._slicer_task_3b,
+                    range(layer_cnt),
+                    [self.conf] * layer_cnt,
+                    [self.support_width] * layer_cnt,
+                    overhang_drops
                 )
             )
-            del overhang_drops
+        )
+        del overhang_drops
 
-        with executor(max_workers=threads) as ex:
-            print("Stage 4: Path Generation")
-            self.future_raft = ex.submit(
-                self._slicer_task_4a,
-                self.support_width,
-                self.conf,
-                self.layer_paths[0],
-                self.support_outline[0]
-            )
+        print("Stage 4: Path Generation")
+        (
+            self.raft_outline,
+            self.raft_infill,
+            self.brim_paths,
+            self.skirt_paths,
+            self.priming_paths
+        ) = self._slicer_task_4a(
+            self.support_width,
+            self.conf,
+            self.layer_paths[0],
+            self.support_outline[0]
+        )
 
-            top_cnt = self.conf['top_layers']
-            bot_cnt = self.conf['bottom_layers']
-            (
-                self.solid_infill,
-                self.sparse_infill
-            ) = zip(
-                *list(
-                    ex.map(
-                        self._slicer_task_4b,
-                        range(layer_cnt),
-                        [self.extrusion_width] * layer_cnt,
-                        [self.infill_width] * layer_cnt,
-                        [self.conf] * layer_cnt,
-                        [top_masks[i : i+top_cnt] for i in range(layer_cnt)],
-                        [bot_masks[max(0, i-bot_cnt+1) : i+1] for i in range(layer_cnt)],
-                        self.perimeter_paths,
-                        chunksize=chunksize
-                    )
+        top_cnt = self.conf['top_layers']
+        bot_cnt = self.conf['bottom_layers']
+        (
+            self.solid_infill,
+            self.sparse_infill
+        ) = zip(
+            *list(
+                map(
+                    self._slicer_task_4b,
+                    range(layer_cnt),
+                    [self.extrusion_width] * layer_cnt,
+                    [self.infill_width] * layer_cnt,
+                    [self.conf] * layer_cnt,
+                    [top_masks[i : i+top_cnt] for i in range(layer_cnt)],
+                    [bot_masks[max(0, i-bot_cnt+1) : i+1] for i in range(layer_cnt)],
+                    self.perimeter_paths
                 )
             )
+        )
 
-            (
-                self.raft_outline,
-                self.raft_infill,
-                self.brim_paths,
-                self.skirt_paths,
-                self.priming_paths
-            ) = self.future_raft.result()
-
-            del top_masks
-            del bot_masks
+        del top_masks
+        del bot_masks
 
         raft_layers = len(self.raft_infill)
         for i in range(raft_layers):
@@ -491,7 +473,7 @@ class Slicer(object):
 
     @staticmethod
     def _slicer_task_4b(layer, ewidth, iwidth, conf, top_masks, bot_masks, perims):
-        print("Start layer={0}".format(layer))
+        print(" Layer {0}".format(layer))
         # Solid Mask
         outmask = []
         for mask in top_masks:

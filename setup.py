@@ -4,7 +4,7 @@ import os
 import glob
 from setuptools import setup
 
-VERSION = "0.9.4"
+VERSION = "0.8.0"
 
 
 def find_data_files(source, target, patterns):
@@ -47,7 +47,7 @@ setup(
     author_email='revarbat@gmail.com',
     url='https://github.com/revarbat/mandoline-py',
     download_url='https://github.com/revarbat/mandoline-py/archive/master.zip',
-    packages=['mandoline-py'],
+    packages=['mandoline'],
     license='MIT License',
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -62,13 +62,12 @@ setup(
     ],
     keywords='stl gcode slicer 3dprinting',
     entry_points={
-        'console_scripts': ['mandoline-py=mandoline-py:main'],
+        'console_scripts': ['mandoline=mandoline:main'],
     },
     install_requires=[
         'setuptools',
         'six>=1.10.0',
         'pyquaternion>=0.9.5',
         'pyclipper>=1.1.0',
-        'PyOpenGL-accelerate>=3.1.0',
     ],
 )
