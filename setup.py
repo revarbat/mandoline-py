@@ -4,7 +4,7 @@ import os
 import glob
 from setuptools import setup
 
-VERSION = "0.8.1"
+VERSION = "0.8.2"
 
 
 def find_data_files(source, target, patterns):
@@ -74,5 +74,6 @@ setup(
         'six>=1.10.0',
         'pyquaternion>=0.9.5',
         'pyclipper>=1.1.0',
+        'appdirs>=1.4.3',
     ],
 )

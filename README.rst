@@ -37,10 +37,30 @@ with the -o OUTFILE arguments::
 
     mandoline -o testcube.gcode testcube.stl
 
-If you want to force it to try to slice the STL file, even if it fails
-validation, then add the -y argument::
+If you want to force it to skip validation, then add the -n argument::
 
-    mandoline -o testcube.gcode -y testcube.stl
+    mandoline -o testcube.gcode -n testcube.stl
+
+To display all slicing config options, use the --show-configs argument::
+
+    mandoline --show-configs
+
+To get descriptions about all slicing config options, use the --help-configs argument::
+
+    mandoline --help-configs
+
+You can set slicing options on the command-line with -S NAME=VALUE args::
+
+    mandoline -S layer_height=0.3 -S skirt_loops=3
+
+You can write changed options to the persistent slicing configs file using
+the -w argument::
+
+    mandoline -S layer_height=0.3 -S brim_loops=3 -w
+
+You can query the value of a slicing config option with the -q OPTNAME argument::
+
+    mandoline -q layer_height -q brim_loops
 
 You can view the sliced output in a GUI window if you add the -g argument.
 In this window, up and down arrow keys will move through the slice layers,

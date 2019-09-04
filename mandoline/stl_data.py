@@ -1,8 +1,13 @@
+from __future__ import print_function
+
+import os.path
 import sys
 import math
+import time
 import struct
 from pyquaternion import Quaternion
 
+from .TextThermometer import TextThermometer
 from .point3d import Point3DCache
 from .vector import Vector
 from .facet3d import Facet3DCache
@@ -115,21 +120,28 @@ class StlData(object):
 
     def read_file(self, filename):
         self.filename = filename
+        print("Loading model")
+        file_size = os.path.getsize(filename)
         with open(filename, 'rb') as f:
             line = f.readline(80)
             if line == "":
                 return  # End of file.
             if line[0:6].lower() == b"solid " and len(line) < 80:
                 # Reading ASCII STL file.
+                thermo = TextThermometer(file_size)
                 while self._read_ascii_facet(f) is not None:
-                    pass
+                    thermo.update(f.tell())
+                thermo.clear()
             else:
                 # Reading Binary STL file.
                 chunk = f.read(4)
                 facets = struct.unpack('<I', chunk)[0]
+                thermo = TextThermometer(facets)
                 for n in range(facets):
+                    thermo.update(n)
                     if self._read_binary_facet(f) is None:
                         pass
+                thermo.clear()
 
     def _write_ascii_file(self, filename):
         with open(filename, 'wb') as f:

@@ -2,14 +2,13 @@ from __future__ import print_function
 
 import sys
 import math
+import time
+import os.path
 from collections import OrderedDict
-
-try:  # Python 2
-    from Tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
-except ImportError:  # Python 3
-    from tkinter import (Tk, Canvas, BOTH, ROUND, NW, ALL, mainloop)
+from appdirs import user_config_dir
 
 import mandoline.geometry2d as geom
+from .TextThermometer import TextThermometer
 
 
 # Support:
@@ -50,7 +49,7 @@ slicer_configs = OrderedDict([
     )),
     ('Extras', (
         ('skirt_loops',       int,      0, (0, 100),    "Print at least this many skirt loops to prime the extruder."),
-        ('skirt_min_len',     float,  0.0, (0., 1000.), "Add extra loops on the first layer until we've extruded at least this amount."),
+        ('skirt_min_len',     float, 10.0, (0., 1000.), "Add extra loops on the first layer until we've extruded at least this amount."),
         ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
         ('skirt_layers',      int,      1, (1, 1000),   "Number of layers to print print the skirt on."),
         ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
@@ -73,29 +72,29 @@ slicer_configs = OrderedDict([
         ('nozzle_0_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 0. (C)"),
         ('nozzle_0_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 0. (mm)"),
         ('nozzle_0_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 0. (mm)"),
-        ('nozzle_0_xoff',     float,  0.0, (0., 100.), "The X positional offset for extruder 0. (mm)"),
-        ('nozzle_0_yoff',     float,  0.0, (0., 100.), "The Y positional offset for extruder 0. (mm)"),
+        ('nozzle_0_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 0. (mm)"),
+        ('nozzle_0_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 0. (mm)"),
         ('nozzle_0_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 0. (mm^3/s)"),
 
         ('nozzle_1_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 1. (C)"),
         ('nozzle_1_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 1. (mm)"),
         ('nozzle_1_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 1. (mm)"),
-        ('nozzle_1_xoff',     float, 25.0, (0., 100.), "The X positional offset for extruder 1. (mm)"),
-        ('nozzle_1_yoff',     float,  0.0, (0., 100.), "The Y positional offset for extruder 1. (mm)"),
+        ('nozzle_1_xoff',     float, 25.0, (-100., 100.), "The X positional offset for extruder 1. (mm)"),
+        ('nozzle_1_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 1. (mm)"),
         ('nozzle_1_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 1. (mm^3/s)"),
 
         ('nozzle_2_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 2. (C)"),
         ('nozzle_2_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 2. (mm)"),
         ('nozzle_2_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 2. (mm)"),
-        ('nozzle_2_xoff',     float, -25., (0., 100.), "The X positional offset for extruder 2. (mm)"),
-        ('nozzle_2_yoff',     float,  0.0, (0., 100.), "The Y positional offset for extruder 2. (mm)"),
+        ('nozzle_2_xoff',     float, -25., (-100., 100.), "The X positional offset for extruder 2. (mm)"),
+        ('nozzle_2_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 2. (mm)"),
         ('nozzle_2_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 2. (mm^3/s)"),
 
         ('nozzle_3_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 3. (C)"),
         ('nozzle_3_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 3. (mm)"),
         ('nozzle_3_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 3. (mm)"),
-        ('nozzle_3_xoff',     float,  0.0, (0., 100.), "The X positional offset for extruder 3. (mm)"),
-        ('nozzle_3_yoff',     float, 25.0, (0., 100.), "The Y positional offset for extruder 3. (mm)"),
+        ('nozzle_3_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 3. (mm)"),
+        ('nozzle_3_yoff',     float, 25.0, (-100., 100.), "The Y positional offset for extruder 3. (mm)"),
         ('nozzle_3_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 3. (mm^3/s)"),
     )),
 ])
@@ -108,9 +107,16 @@ class Slicer(object):
     def __init__(self, model, **kwargs):
         self.model = model
         self.conf = {}
+        self.conf_metadata = {}
         for key, opts in slicer_configs.items():
             for name, typ, dflt, rng, desc in opts:
                 self.conf[name] = dflt
+                self.conf_metadata[name] = {
+                    "type": typ,
+                    "default": dflt,
+                    "range": rng,
+                    "descr": desc
+                }
         self.mag = 4
         self.layer = 0
         self.config(**kwargs)
@@ -120,7 +126,100 @@ class Slicer(object):
             if key in self.conf:
                 self.conf[key] = val
 
-    def slice_to_file(self, filename, showgui=False, threads=-1):
+    def get_conf_filename(self):
+        return user_config_dir("Mandoline")
+
+    def set_config(self, key, valstr):
+        key = key.strip()
+        valstr = valstr.strip()
+        if key not in self.conf_metadata:
+            print("Ignoring unknown config option: {}".format(key))
+            return
+        typ = self.conf_metadata[key]["type"]
+        rng = self.conf_metadata[key]["range"]
+        if typ is bool:
+            if valstr in ["True", "False"]:
+                self.conf[key] = valstr == "True"
+            else:
+                print("Ignoring bad boolean configuration value: {}={}".format(key,valstr))
+                print("Value should be either True or False")
+        elif typ is int:
+            if int(valstr) >= rng[0] and int(valstr) <= rng[1]:
+                self.conf[key] = int(valstr)
+            else:
+                print("Ignoring bad integer configuration value: {}={}".format(key,valstr))
+                print("Value should be between {} and {}, inclusive.".format(*rng))
+        elif typ is float:
+            if float(valstr) >= rng[0] and float(valstr) <= rng[1]:
+                self.conf[key] = float(valstr)
+            else:
+                print("Ignoring bad float configuration value: {}={}".format(key,valstr))
+                print("Value should be between {} and {}, inclusive.".format(*rng))
+        elif typ is list:
+            if valstr in rng:
+                self.conf[key] = str(valstr)
+            else:
+                print("Ignoring bad configuration value: {}={}".format(key,valstr))
+                print("Valid options are: {}".format(", ".join(rng)))
+
+    def load_configs(self):
+        conffile = self.get_conf_filename()
+        if not os.path.exists(conffile):
+            return
+        if not os.path.isfile(conffile):
+            return
+        print("Loading configs from {}".format(conffile))
+        with open(conffile, "r") as f:
+            for line in f.readlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                key, val = line.split("=")
+                self.set_config(key,val)
+
+    def save_configs(self):
+        conffile = self.get_conf_filename()
+        confdir = os.path.dirname(conffile)
+        if not os.path.exists(confdir):
+            os.makedirs(confdir)
+        with open(conffile, "w") as f:
+            for sect, opts in slicer_configs.items():
+                f.write("# {}\n".format(sect))
+                for name, typ, dflt, rng, desc in opts:
+                    f.write("{}={}\n".format(name, self.conf[name]))
+                f.write("\n\n")
+        print("Saving configs to {}".format(conffile))
+
+    def display_configs_help(self, key=None, vals_only=False):
+        if key:
+            key = key.strip()
+            if key not in self.conf_metadata:
+                print("Unknown config option: {}".format(key))
+                return
+        for sect, opts in slicer_configs.items():
+            if not vals_only and not key:
+                print("{}:".format(sect))
+            for name, typ, dflt, rng, desc in opts:
+                if key and key != name:
+                    continue
+                if typ is bool:
+                    typename = "bool"
+                    rngstr = "True/False"
+                elif typ is int:
+                    typename = "int"
+                    rngstr = "{} ... {}".format(*rng)
+                elif typ is float:
+                    typename = "float"
+                    rngstr = "{} ... {}".format(*rng)
+                elif typ is list:
+                    typename = "opt"
+                    rngstr = ", ".join(rng)
+                print("  {} = {}".format(name, self.conf[name]))
+                if not vals_only:
+                    print("          Type: {}  ({})".format(typename, rngstr))
+                    print("          {}".format(desc))
+
+    def slice_to_file(self, filename, showgui=False):
         print("Slicing start")
         layer_h = self.conf['layer_height']
         dflt_nozl = self.conf['default_nozzle']
@@ -146,6 +245,7 @@ class Slicer(object):
             self.model.points.minz + layer_h * (layer + 1)
             for layer in range(layer_cnt)
         ]
+        thermo = TextThermometer(layer_cnt)
 
         # print('<tkcad formatversion="1.1" units="inches" showfractions="YES" material="Aluminum">', file=sys.stderr)
         print("Stage 1: Perimeters")
@@ -158,6 +258,8 @@ class Slicer(object):
                 map(
                     Slicer._slicer_task_1,
                     self.layer_zs,
+                    range(layer_cnt),
+                    [thermo] * layer_cnt,
                     [self.extrusion_width] * layer_cnt,
                     [self.support_width] * layer_cnt,
                     [layer_h] * layer_cnt,
@@ -166,6 +268,7 @@ class Slicer(object):
                 )
             )
         )
+        thermo.clear()
 
         print("Stage 2: Generate Masks")
         overhang_drops = Slicer._slicer_task_2a(
@@ -179,12 +282,14 @@ class Slicer(object):
                 map(
                     Slicer._slicer_task_2b,
                     range(layer_cnt),
+                    [thermo] * layer_cnt,
                     [([] if i < 1 else self.perimeter_paths[i-1][-1]) for i in range(layer_cnt)],
                     [p[-1] for p in self.perimeter_paths],
                     [([] if i >= layer_cnt-1 else self.perimeter_paths[i+1][-1]) for i in range(layer_cnt)]
                 )
             )
         )
+        thermo.clear()
 
         print("Stage 3: Support & Raft")
         (
@@ -195,6 +300,7 @@ class Slicer(object):
                 map(
                     Slicer._slicer_task_3b,
                     range(layer_cnt),
+                    [thermo] * layer_cnt,
                     [self.conf] * layer_cnt,
                     [self.support_width] * layer_cnt,
                     overhang_drops
@@ -202,8 +308,9 @@ class Slicer(object):
             )
         )
         del overhang_drops
+        thermo.clear()
 
-        print("Stage 4: Path Generation")
+        print("Stage 4: Layer Path Generation")
         (
             self.raft_outline,
             self.raft_infill,
@@ -219,6 +326,7 @@ class Slicer(object):
 
         top_cnt = self.conf['top_layers']
         bot_cnt = self.conf['bottom_layers']
+        thermo = TextThermometer(layer_cnt)
         (
             self.solid_infill,
             self.sparse_infill
@@ -227,6 +335,7 @@ class Slicer(object):
                 map(
                     self._slicer_task_4b,
                     range(layer_cnt),
+                    [thermo] * layer_cnt,
                     [self.extrusion_width] * layer_cnt,
                     [self.infill_width] * layer_cnt,
                     [self.conf] * layer_cnt,
@@ -236,6 +345,7 @@ class Slicer(object):
                 )
             )
         )
+        thermo.clear()
 
         del top_masks
         del bot_masks
@@ -275,6 +385,7 @@ class Slicer(object):
 
             for slicenum in range(len(self.perimeter_paths)):
                 layer = raft_layers + slicenum
+                thermo.update(slicenum)
                 outline = geom.close_paths(self.support_outline[slicenum])
                 f.write("( support outline )\n")
                 for line in self._paths_gcode(outline, self.support_width, supp_nozl, self.layer_zs[layer]):
@@ -295,9 +406,12 @@ class Slicer(object):
                 f.write("( sparse infill )\n")
                 for line in self._paths_gcode(self.sparse_infill[slicenum], self.infill_width, infl_nozl, self.layer_zs[layer]):
                     f.write(line)
+            thermo.clear()
+        print("Slicing complete")
 
         # print('</tkcad>', file=sys.stderr)
         if showgui:
+            print("Launching slice viewer")
             self._display_paths()
 
         # TODO: Route paths
@@ -349,7 +463,9 @@ class Slicer(object):
     ############################################################
 
     @staticmethod
-    def _slicer_task_1(z, ewidth, suppwidth, layer_h, conf, model):
+    def _slicer_task_1(z, layer, thermo, ewidth, suppwidth, layer_h, conf, model):
+        thermo.update(layer)
+
         # Layer Slicing
         paths = model.slice_at_z(z - layer_h/2, layer_h)
         paths = geom.orient_paths(paths)
@@ -394,14 +510,16 @@ class Slicer(object):
         return out_paths
 
     @staticmethod
-    def _slicer_task_2b(layer, below, perim, above):
+    def _slicer_task_2b(layer, thermo, below, perim, above):
+        thermo.update(layer)
         # Top and Bottom masks
         top_mask = geom.diff(perim, above)
         bot_mask = geom.diff(perim, below)
         return top_mask, bot_mask
 
     @staticmethod
-    def _slicer_task_3b(layer, conf, ewidth, overhangs):
+    def _slicer_task_3b(layer, thermo, conf, ewidth, overhangs):
+        thermo.update(layer)
         # Support
         outline = []
         infill = []
@@ -421,7 +539,7 @@ class Slicer(object):
         raft_outline = []
         raft_infill = []
         if conf['adhesion_type'] == "Raft":
-            rings = math.ceil(conf['brim_width']/ewidth)
+            rings = int(math.ceil(conf['brim_width']/ewidth))
             outset = min(conf['skirt_outset']+ewidth*conf['skirt_loops'], conf['raft_outset'])
             paths = geom.union(layer_paths, supp_outline)
             raft_outline = geom.offset(paths, outset)
@@ -439,7 +557,7 @@ class Slicer(object):
         adhesion = conf['adhesion_type']
         brim_w = conf['brim_width']
         if adhesion == "Brim":
-            rings = math.ceil(brim_w/ewidth)
+            rings = int(math.ceil(brim_w/ewidth))
             for i in range(rings):
                 brim.append(geom.offset(layer_paths, (i+0.5)*ewidth))
 
@@ -459,7 +577,7 @@ class Slicer(object):
         )
         loops = minloops
         if adhesion != "Raft":
-            loops = max(loops, math.ceil(minlen/plen))
+            loops = max(loops, int(math.ceil(minlen/plen)))
         for i in range(loops-1):
             priming.append(geom.offset(skirt, (i+1)*ewidth))
 
@@ -472,9 +590,9 @@ class Slicer(object):
         )
 
     @staticmethod
-    def _slicer_task_4b(layer, ewidth, iwidth, conf, top_masks, bot_masks, perims):
-        print(" Layer {0}".format(layer))
+    def _slicer_task_4b(layer, thermo, ewidth, iwidth, conf, top_masks, bot_masks, perims):
         # Solid Mask
+        thermo.update(layer)
         outmask = []
         for mask in top_masks:
             outmask = geom.union(outmask, geom.close_paths(mask))
@@ -575,11 +693,15 @@ class Slicer(object):
     ############################################################
 
     def _display_paths(self):
+        try:  # Python 2
+            from Tkinter import (Tk, Canvas, mainloop)
+        except ImportError:  # Python 3
+            from tkinter import (Tk, Canvas, mainloop)
         self.layer = 0
         self.mag = 5.0
         self.master = Tk()
         self.canvas = Canvas(self.master, width=800, height=600)
-        self.canvas.pack(fill=BOTH, expand=1)
+        self.canvas.pack(fill="both", expand=1)
         self.canvas.focus()
         self.master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
         self.master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
@@ -603,8 +725,8 @@ class Slicer(object):
 
     def _redraw_paths(self, incdec=0):
         self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1)
-        self.canvas.delete(ALL)
-        self.canvas.create_text((30, 550), anchor=NW, text="Layer {layer}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=self.layer, z=self.layer_zs[self.layer], zoom=self.mag*100/5.0))
+        self.canvas.delete("all")
+        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=self.layer, z=self.layer_zs[self.layer], zoom=self.mag*100/5.0))
 
         colors = ["#700", "#c00", "#f00", "#f77"]
         if self.layer == 0:
@@ -637,7 +759,7 @@ class Slicer(object):
         for pathnum, path in enumerate(paths):
             path = [(wincx+(x-cx)*self.mag, wincy+(cy-y)*self.mag) for x, y in path]
             color = colors[(pathnum + offset) % len(colors)]
-            self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle=ROUND, joinstyle=ROUND)
+            self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle="round", joinstyle="round")
 
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap
