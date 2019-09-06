@@ -379,8 +379,7 @@ class Slicer(object):
 
             if self.brim_paths:
                 f.write("( brim )\n")
-                paths = self.brim_paths
-                for line in self._paths_gcode(paths+paths[0], self.support_width, supp_nozl, self.layer_zs[layer]):
+                for line in self._paths_gcode(self.brim_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
                     f.write(line)
 
             for slicenum in range(len(self.perimeter_paths)):
@@ -559,7 +558,10 @@ class Slicer(object):
         if adhesion == "Brim":
             rings = int(math.ceil(brim_w/ewidth))
             for i in range(rings):
-                brim.append(geom.offset(layer_paths, (i+0.5)*ewidth))
+                for path in geom.offset(layer_paths, (i+0.5)*ewidth):
+                    if path[-1] != path[0]:
+                        path.append(path[0])
+                    brim.append(path)
 
         # Skirt
         skirt = []
