@@ -64,33 +64,35 @@ slicer_configs = OrderedDict([
         ('retract_lift',      float,   0.0, (0., 10.),  "Distance to lift the extruder head during retracted moves. (mm)"),
     )),
     ('Machine', (
+        ('heated_bed_temp',   int,     70, (0, 150),   "The temperature to set the heated bed to."),
+
         ('extruder_count',    int,      1, (1, 4),     "The number of extruders this machine has."),
         ('default_nozzle',    int,      0, (0, 7),     "The default extruder used for printing."),
         ('infill_nozzle',     int,     -1, (-1, 7),    "The extruder used for infill material.  -1 means use default nozzle."),
         ('support_nozzle',    int,     -1, (-1, 7),    "The extruder used for support material.  -1 means use default nozzle."),
 
-        ('nozzle_0_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 0. (C)"),
+        ('nozzle_0_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
         ('nozzle_0_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 0. (mm)"),
         ('nozzle_0_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 0. (mm)"),
         ('nozzle_0_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 0. (mm)"),
         ('nozzle_0_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 0. (mm)"),
         ('nozzle_0_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 0. (mm^3/s)"),
 
-        ('nozzle_1_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 1. (C)"),
+        ('nozzle_1_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 1. (C)"),
         ('nozzle_1_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 1. (mm)"),
         ('nozzle_1_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 1. (mm)"),
         ('nozzle_1_xoff',     float, 25.0, (-100., 100.), "The X positional offset for extruder 1. (mm)"),
         ('nozzle_1_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 1. (mm)"),
         ('nozzle_1_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 1. (mm^3/s)"),
 
-        ('nozzle_2_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 2. (C)"),
+        ('nozzle_2_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 2. (C)"),
         ('nozzle_2_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 2. (mm)"),
         ('nozzle_2_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 2. (mm)"),
         ('nozzle_2_xoff',     float, -25., (-100., 100.), "The X positional offset for extruder 2. (mm)"),
         ('nozzle_2_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 2. (mm)"),
         ('nozzle_2_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 2. (mm^3/s)"),
 
-        ('nozzle_3_temp',     float,  0.4, (0.1, 1.5), "The temperature of the nozzle for extruder 3. (C)"),
+        ('nozzle_3_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 3. (C)"),
         ('nozzle_3_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 3. (mm)"),
         ('nozzle_3_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 3. (mm)"),
         ('nozzle_3_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 3. (mm)"),
@@ -137,30 +139,42 @@ class Slicer(object):
             return
         typ = self.conf_metadata[key]["type"]
         rng = self.conf_metadata[key]["range"]
+        badval = True
+        typestr = ""
+        errmsg = ""
         if typ is bool:
+            typestr = "boolean "
+            errmsg = "Value should be either True or False"
             if valstr in ["True", "False"]:
                 self.conf[key] = valstr == "True"
-            else:
-                print("Ignoring bad boolean configuration value: {}={}".format(key,valstr))
-                print("Value should be either True or False")
+                badval = False
         elif typ is int:
-            if int(valstr) >= rng[0] and int(valstr) <= rng[1]:
-                self.conf[key] = int(valstr)
-            else:
-                print("Ignoring bad integer configuration value: {}={}".format(key,valstr))
-                print("Value should be between {} and {}, inclusive.".format(*rng))
+            typestr = "integer "
+            errmsg = "Value should be between {} and {}, inclusive.".format(*rng)
+            try:
+                if int(valstr) >= rng[0] and int(valstr) <= rng[1]:
+                    self.conf[key] = int(valstr)
+                    badval = False
+            except(ValueError):
+                pass
         elif typ is float:
-            if float(valstr) >= rng[0] and float(valstr) <= rng[1]:
-                self.conf[key] = float(valstr)
-            else:
-                print("Ignoring bad float configuration value: {}={}".format(key,valstr))
-                print("Value should be between {} and {}, inclusive.".format(*rng))
+            typestr = "float "
+            errmsg = "Value should be between {} and {}, inclusive.".format(*rng)
+            try:
+                if float(valstr) >= rng[0] and float(valstr) <= rng[1]:
+                    self.conf[key] = float(valstr)
+                    badval = False
+            except(ValueError):
+                pass
         elif typ is list:
+            typestr = ""
+            errmsg = "Valid options are: {}".format(", ".join(rng))
             if valstr in rng:
                 self.conf[key] = str(valstr)
-            else:
-                print("Ignoring bad configuration value: {}={}".format(key,valstr))
-                print("Valid options are: {}".format(", ".join(rng)))
+                badval = False
+        if badval:
+            print("Ignoring bad {0}configuration value: {1}={2}".format(typestr,key,valstr))
+            print(errmsg)
 
     def load_configs(self):
         conffile = self.get_conf_filename()
