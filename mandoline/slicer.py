@@ -352,7 +352,7 @@ class Slicer(object):
 
         raft_layers = len(self.raft_infill)
         for i in range(raft_layers):
-            self.layer_zs.append(self.layer_zs[-1]+self.conf[layer_height])
+            self.layer_zs.append(self.layer_zs[-1]+layer_h)
 
         print("Gcode Generation")
         with open(filename, "w") as f:
@@ -599,7 +599,7 @@ class Slicer(object):
         for mask in bot_masks:
             outmask = geom.union(outmask, geom.close_paths(mask))
         solid_mask = geom.clip(outmask, perims[-1])
-        bounds = geom.paths_bounds(outmask)
+        bounds = geom.paths_bounds(perims[-1])
 
         # Solid Infill
         solid_infill = []
@@ -634,10 +634,8 @@ class Slicer(object):
                 lines = geom.make_infill_hexagons(bounds, base_ang, density, iwidth)
             else:
                 lines = []
-            for line in lines:
-                lines = [line]
-                lines = geom.clip(lines, mask, subj_closed=False)
-                sparse_infill.extend(lines)
+            lines = geom.clip(lines, mask, subj_closed=False)
+            sparse_infill.extend(lines)
         return solid_infill, sparse_infill
 
     ############################################################
