@@ -581,7 +581,8 @@ class Slicer(object):
         if adhesion != "Raft":
             loops = max(loops, int(math.ceil(minlen/plen)))
         for i in range(loops-1):
-            priming.append(geom.offset(skirt, (i+1)*ewidth))
+            for path in geom.offset(skirt, (i+1)*ewidth):
+                priming.append(path)
 
         return (
             geom.close_paths(raft_outline),
