@@ -539,7 +539,7 @@ class Slicer(object):
         raft_infill = []
         if conf['adhesion_type'] == "Raft":
             rings = int(math.ceil(conf['brim_width']/ewidth))
-            outset = min(conf['skirt_outset']+ewidth*conf['skirt_loops'], conf['raft_outset'])
+            outset = max(conf['skirt_outset']+ewidth*conf['skirt_loops'], conf['raft_outset'])
             paths = geom.union(layer_paths, supp_outline)
             raft_outline = geom.offset(paths, outset)
             bounds = geom.paths_bounds(raft_outline)
@@ -725,25 +725,35 @@ class Slicer(object):
         self._redraw_paths()
 
     def _redraw_paths(self, incdec=0):
-        self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1)
+        raft_layers = len(self.raft_infill)
+        self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1+raft_layers)
+        layernum = self.layer
         self.canvas.delete("all")
-        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=self.layer, z=self.layer_zs[self.layer], zoom=self.mag*100/5.0))
+        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=layernum, z=self.layer_zs[layernum], zoom=self.mag*100/5.0))
 
         colors = ["#700", "#c00", "#f00", "#f77"]
-        if self.layer == 0:
-            self._draw_line(self.priming_paths, colors=colors, ewidth=self.support_width)
-            self._draw_line(self.brim_paths, colors=colors, ewidth=self.support_width)
-            self._draw_line(self.skirt_paths, colors=colors, ewidth=self.support_width)
-        self._draw_line(self.support_outline[self.layer], colors=colors, ewidth=self.support_width)
-        self._draw_line(self.support_infill[self.layer], colors=colors, ewidth=self.support_width)
+        if layernum < raft_layers:
+            if layernum == 0:
+                self._draw_line(self.raft_outline, colors=colors, ewidth=self.support_width)
+            self._draw_line(self.raft_infill[layernum], colors=colors, ewidth=self.support_width)
+            return
+        else:
+            if layernum == 0:
+                self._draw_line(self.priming_paths, colors=colors, ewidth=self.support_width)
+                self._draw_line(self.brim_paths, colors=colors, ewidth=self.support_width)
+                self._draw_line(self.skirt_paths, colors=colors, ewidth=self.support_width)
+            layernum -= raft_layers
+
+        self._draw_line(self.support_outline[layernum], colors=colors, ewidth=self.support_width)
+        self._draw_line(self.support_infill[layernum], colors=colors, ewidth=self.support_width)
 
         colors = ["#070", "#0c0", "#0f0", "#7f7"]
-        for pathnum, path in enumerate(self.perimeter_paths[self.layer]):
+        for pathnum, path in enumerate(self.perimeter_paths[layernum]):
             self._draw_line(path, offset=pathnum, colors=colors, ewidth=self.extrusion_width)
 
         colors = ["#770", "#aa0", "#dd0", "#ff0"]
-        self._draw_line(self.solid_infill[self.layer], colors=colors, ewidth=self.infill_width)
-        self._draw_line(self.sparse_infill[self.layer], colors=colors, ewidth=self.infill_width)
+        self._draw_line(self.solid_infill[layernum], colors=colors, ewidth=self.infill_width)
+        self._draw_line(self.sparse_infill[layernum], colors=colors, ewidth=self.infill_width)
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
         ptcache = self.model.points
