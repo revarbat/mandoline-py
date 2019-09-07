@@ -18,13 +18,6 @@ from .TextThermometer import TextThermometer
 #     Make array of parallel lines
 #     clip lines by layer clip region
 #     add clipped lines and clip region outline to layer output.
-# Raft:
-#   calculate outset footprint for raft outline.
-#   make array of parallel thick lines, and clip by extrusion inset raft outline
-#   make perpendicular array of parallel thin lines, and clip by extrusion inset raft outline
-#   Add raft outline and clipped thick lines to first layer.
-#   Add raft outline and clipped thin lines to second layer.
-#   Raise remainder of print 2 layers.
 
 
 slicer_configs = OrderedDict([
@@ -261,7 +254,6 @@ class Slicer(object):
         ]
         thermo = TextThermometer(layer_cnt)
 
-        # print('<tkcad formatversion="1.1" units="inches" showfractions="YES" material="Aluminum">', file=sys.stderr)
         print("Stage 1: Perimeters")
         (
             self.layer_paths,
@@ -370,14 +362,30 @@ class Slicer(object):
 
         print("Gcode Generation")
         with open(filename, "w") as f:
-            f.write("( raft_outline )\n")
-            outline = geom.close_paths(self.raft_outline)
-            for line in self._paths_gcode(outline, self.support_width, supp_nozl, self.layer_zs[0]):
-                f.write(line)
-            f.write("( raft_infill )\n")
-            for layer, layer_paths in enumerate(self.raft_infill):
-                for line in self._paths_gcode(layer_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
+            f.write("( setup )\n")
+            f.write("M82 ;absolute extrusion mode\n")
+            f.write("M107 ;Fan off\n")
+            if self.conf['heated_bed_temp'] > 0:
+                f.write("M140 S{:d} ;set bed temp\n".format(self.conf['heated_bed_temp']))
+                f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['heated_bed_temp']))
+            f.write("M104 S{:d} ;set extruder0 temp\n".format(self.conf['nozzle_0_temp']))
+            f.write("M109 S{:d} ;wait for extruder0 temp\n".format(self.conf['nozzle_0_temp']))
+            f.write("G28 ;auto-home all axes\n")
+            f.write("G1 Z15 F6000 ;raise extruder\n")
+            f.write("G92 E0\n")
+            f.write("G1 F200 E3\n")
+            f.write("G92 E0\n")
+
+            if self.raft_outline:
+                f.write("( raft_outline )\n")
+                outline = geom.close_paths(self.raft_outline)
+                for line in self._paths_gcode(outline, self.support_width, supp_nozl, self.layer_zs[0]):
                     f.write(line)
+            if self.raft_infill:
+                f.write("( raft_infill )\n")
+                for layer, layer_paths in enumerate(self.raft_infill):
+                    for line in self._paths_gcode(layer_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
+                        f.write(line)
 
             layer = raft_layers
             if self.priming_paths:
@@ -422,7 +430,6 @@ class Slicer(object):
             thermo.clear()
         print("Slicing complete")
 
-        # print('</tkcad>', file=sys.stderr)
         if showgui:
             print("Launching slice viewer")
             self._display_paths()
@@ -475,6 +482,7 @@ class Slicer(object):
 
     ############################################################
 
+    # Stage 1: Perimeters
     @staticmethod
     def _slicer_task_1(z, layer, thermo, ewidth, suppwidth, layer_h, conf, model):
         thermo.update(layer)
@@ -498,6 +506,7 @@ class Slicer(object):
 
         return paths, overhangs, perims
 
+    # Stage 2: Generate Masks
     @staticmethod
     def _slicer_task_2a(conf, overhangs, layer_paths):
         # Overhang Drops
@@ -507,6 +516,9 @@ class Slicer(object):
             return []
         layer_drops = []
         drop_paths = []
+        # FIXME:
+        #   External: generate overhang mask from all layers.  From bottom up, diff layer outline from overhang mask, updating it and saving a copy for each layer.
+        #   Everywhere: Generate overhang masks for each layer from top down.  For each layer diff layer outline from overhang mask, and save that for that layer only.
         for layer in reversed(range(len(overhangs))):
             drop_paths = geom.union(drop_paths, overhangs[layer])
             layer_mask = geom.offset(layer_paths[layer], outset)
@@ -530,6 +542,7 @@ class Slicer(object):
         bot_mask = geom.diff(perim, below)
         return top_mask, bot_mask
 
+    # Stage 3: Support & Raft
     @staticmethod
     def _slicer_task_3b(layer, thermo, conf, ewidth, overhangs):
         thermo.update(layer)
@@ -546,6 +559,7 @@ class Slicer(object):
             infill = geom.clip(lines, mask, subj_closed=False)
         return outline, infill
 
+    # Stage 4: Layer Path Generation
     @staticmethod
     def _slicer_task_4a(ewidth, conf, layer_paths, supp_outline):
         # Raft
