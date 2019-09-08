@@ -359,6 +359,8 @@ class Slicer(object):
         raft_layers = len(self.raft_infill)
         for i in range(raft_layers):
             self.layer_zs.append(self.layer_zs[-1]+layer_h)
+        for layer in range(len(self.layer_zs)):
+            self.layer_zs[layer] -= self.model.points.minz
 
         print("Gcode Generation")
         with open(filename, "w") as f:
@@ -494,8 +496,8 @@ class Slicer(object):
 
         # Overhang Masks
         supp_ang = conf['overhang_angle']
-        tris = model.get_overhang_footprint_triangles(ang=supp_ang, z=z)
-        overhangs = geom.diff(geom.union(tris, []), paths)
+        ohoff = layer_h * math.tan(supp_ang * math.pi / 180.0)
+        overhang = geom.offset(paths, ohoff - 0.5 * ewidth)
 
         # Perimeters
         perims = []
@@ -504,35 +506,38 @@ class Slicer(object):
             shell = geom.close_paths(shell)
             perims.append(shell)
 
-        return paths, overhangs, perims
+        return paths, overhang, perims
 
     # Stage 2: Generate Masks
     @staticmethod
-    def _slicer_task_2a(conf, overhangs, layer_paths):
+    def _slicer_task_2a(conf, overhang_masks, layer_paths):
         # Overhang Drops
+        layers = len(overhang_masks)
         outset = conf['support_outset']
         supp_type = conf['support_type']
         if supp_type == 'None':
             return []
-        layer_drops = []
+        layer_overhangs = []
         drop_paths = []
-        # FIXME:
-        #   External: generate overhang mask from all layers.  From bottom up, diff layer outline from overhang mask, updating it and saving a copy for each layer.
-        #   Everywhere: Generate overhang masks for each layer from top down.  For each layer diff layer outline from overhang mask, and save that for that layer only.
-        for layer in reversed(range(len(overhangs))):
-            drop_paths = geom.union(drop_paths, overhangs[layer])
-            layer_mask = geom.offset(layer_paths[layer], outset)
-            layer_drops.insert(0, geom.diff(drop_paths, layer_mask))
-        if supp_type == 'External':
-            return layer_drops
-        out_paths = []
-        mask_paths = []
-        for layer, drop_paths in enumerate(layer_drops):
-            layer_mask = geom.offset(layer_paths[layer], outset)
-            mask_paths = geom.union(mask_paths, layer_mask)
-            drop_paths = geom.diff(drop_paths, mask_paths)
-            out_paths.append(drop_paths)
-        return out_paths
+        for layer in reversed(range(layers)):
+            layer_above = [] if layer >= layers-1 else layer_paths[layer + 1]
+            overhang = geom.diff(layer_above, overhang_masks[layer])
+            drop_paths = geom.union(drop_paths, overhang)
+            layer_overhangs.append(drop_paths)
+        layer_overhangs.reverse()
+        cumulative_mask = []
+        support_masks = []
+        for layer in range(layers):
+            if supp_type == 'External':
+                cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer], outset))
+            elif supp_type == 'Everywhere':
+                cumulative_mask = geom.offset(layer_paths[layer], outset)
+                if layer > 0:
+                    cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer-1], outset))
+            if layer < layers-1:
+                cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer+1], outset))
+            support_masks.append(geom.diff(layer_overhangs[layer], cumulative_mask))
+        return support_masks
 
     @staticmethod
     def _slicer_task_2b(layer, thermo, below, perim, above):
@@ -597,7 +602,8 @@ class Slicer(object):
         skirt_w = conf['skirt_outset']
         minloops = conf['skirt_loops']
         minlen = conf['skirt_min_len']
-        skirt = geom.offset(layer_paths, brim_w + skirt_w + ewidth/2.0)
+        skirt_mask = geom.union(layer_paths, supp_outline)
+        skirt = geom.offset(skirt_mask, brim_w + skirt_w + ewidth/2.0)
         plen = max(
             1.0,
             sum(

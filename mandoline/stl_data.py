@@ -219,20 +219,6 @@ class StlData(object):
     def get_edges(self):
         return self.edges
 
-    def get_overhang_footprint_triangles(self, ang=45, z=None):
-        out = []
-        facets = self.facets if z is None else self.get_layer_facets(z)
-        for facet in facets:
-            if facet.overhang_angle() < ang:
-                continue
-            if z is not None and not facet.intersects_z(z):
-                continue
-            tri = facet.get_footprint()
-            if tri is None:
-                continue
-            out.append(tri)
-        return out
-
     def assign_layers(self, layer_height):
         self.layer_facets = {}
         for facet in self.facets:
