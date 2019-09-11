@@ -289,9 +289,10 @@ class Slicer(object):
     ############################################################
 
     def _slicer_task_perimeters(self):
+        self.thermo.set_target(2*self.layers)
         self.layer_paths = []
         self.perimeter_paths = []
-        self.thermo.set_target(2*self.layers)
+        self.bounding_region = []
         for layer in range(self.layers):
             self.thermo.update(layer)
 
@@ -309,6 +310,9 @@ class Slicer(object):
                 shell = geom.close_paths(shell)
                 perims.append(shell)
             self.perimeter_paths.append(perims)
+
+            # Calculate horizontal bounding path
+            self.bounding_region = geom.union(self.bounding_region, paths)
 
         self.top_masks = []
         self.bot_masks = []
@@ -441,7 +445,7 @@ class Slicer(object):
         skirt_w = self.conf['skirt_outset']
         minloops = self.conf['skirt_loops']
         minlen = self.conf['skirt_min_len']
-        skirt_mask = geom.union(self.layer_paths[0], self.support_outline[0])
+        skirt_mask = geom.union(self.bounding_region, self.support_outline[0])
         skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
         self.skirt_paths = geom.close_paths(skirt)
         plen = max(
@@ -558,19 +562,20 @@ class Slicer(object):
                 for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
                     f.write(line)
 
-            if self.skirt_paths:
-                f.write("( skirt )\n")
-                for line in self._paths_gcode(self.skirt_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
             if self.brim_paths:
                 f.write("( brim )\n")
                 for line in self._paths_gcode(self.brim_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
                     f.write(line)
 
             for slicenum in range(len(self.perimeter_paths)):
-                layer = raft_layers + slicenum
                 self.thermo.update(slicenum)
+                layer = raft_layers + slicenum
+
+                if self.skirt_paths and slicenum < self.conf['skirt_layers']:
+                    f.write("( skirt )\n")
+                    for line in self._paths_gcode(self.skirt_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                        f.write(line)
+
                 outline = geom.close_paths(self.support_outline[slicenum])
                 f.write("( support outline )\n")
                 for line in self._paths_gcode(outline, self.support_width, self.supp_nozl, self.layer_zs[layer]):
@@ -656,8 +661,10 @@ class Slicer(object):
         self.canvas = Canvas(self.master, width=800, height=600)
         self.canvas.pack(fill="both", expand=1)
         self.canvas.focus()
+        self.master.bind("<Key-Prior>", lambda e: self._redraw_paths(incdec=10))
         self.master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
         self.master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
+        self.master.bind("<Key-Next>", lambda e: self._redraw_paths(incdec=-10))
         self.master.bind("<Key-equal>", lambda e: self._zoom(incdec=1))
         self.master.bind("<Key-minus>", lambda e: self._zoom(incdec=-1))
         self.master.bind("<Key-1>", lambda e: self._zoom(val= 5.0))
@@ -680,8 +687,15 @@ class Slicer(object):
         raft_layers = len(self.raft_infill)
         self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1+raft_layers)
         layernum = self.layer
+        layers = raft_layers + self.layers
         self.canvas.delete("all")
-        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=layernum, z=self.layer_zs[layernum], zoom=self.mag*100/5.0))
+        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}/{layers}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=layernum, layers=layers-1, z=self.layer_zs[layernum], zoom=self.mag*100/5.0))
+        barpos = (150,570)
+        barsize = (500,10)
+        pcnt = layernum / (layers-1.0)
+        self.canvas.create_rectangle(barpos[0]-1,barpos[1]-1,barpos[0]+barsize[0]+1,barpos[1]+barsize[1]+1,outline="black")
+        if pcnt * barsize[0] > 1.0:
+            self.canvas.create_rectangle(barpos[0],barpos[1],barpos[0]+int(barsize[0]*pcnt),barpos[1]+barsize[1],outline="blue",fill="blue")
 
         colors = ["#700", "#c00", "#f00", "#f77"]
         if layernum < raft_layers:
@@ -693,9 +707,10 @@ class Slicer(object):
             if layernum == 0:
                 self._draw_line(self.priming_paths, colors=colors, ewidth=self.support_width)
                 self._draw_line(self.brim_paths, colors=colors, ewidth=self.support_width)
-                self._draw_line(self.skirt_paths, colors=colors, ewidth=self.support_width)
             layernum -= raft_layers
 
+        if self.skirt_paths and layernum < self.conf['skirt_layers']:
+            self._draw_line(self.skirt_paths, colors=colors, ewidth=self.support_width)
         self._draw_line(self.support_outline[layernum], colors=colors, ewidth=self.support_width)
         self._draw_line(self.support_infill[layernum], colors=colors, ewidth=self.support_width)
 
