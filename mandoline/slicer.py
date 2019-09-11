@@ -228,208 +228,46 @@ class Slicer(object):
 
     def slice_to_file(self, filename, showgui=False):
         print("Slicing start")
-        layer_h = self.conf['layer_height']
-        dflt_nozl = self.conf['default_nozzle']
-        infl_nozl = self.conf['infill_nozzle']
-        supp_nozl = self.conf['support_nozzle']
-        ptcache = self.model.points
-        if infl_nozl == -1:
-            infl_nozl = dflt_nozl
-        if supp_nozl == -1:
-            supp_nozl = dflt_nozl
-        dflt_nozl_d = self.conf['nozzle_{0}_diam'.format(dflt_nozl)]
-        infl_nozl_d = self.conf['nozzle_{0}_diam'.format(infl_nozl)]
-        supp_nozl_d = self.conf['nozzle_{0}_diam'.format(supp_nozl)]
-        self.layer_height = layer_h
+        self.dflt_nozl = self.conf['default_nozzle']
+        self.infl_nozl = self.conf['infill_nozzle']
+        self.supp_nozl = self.conf['support_nozzle']
+        if self.infl_nozl == -1:
+            self.infl_nozl = self.dflt_nozl
+        if self.supp_nozl == -1:
+            self.supp_nozl = self.dflt_nozl
+        dflt_nozl_d = self.conf['nozzle_{0}_diam'.format(self.dflt_nozl)]
+        infl_nozl_d = self.conf['nozzle_{0}_diam'.format(self.infl_nozl)]
+        supp_nozl_d = self.conf['nozzle_{0}_diam'.format(self.supp_nozl)]
+
+        self.layer_h = self.conf['layer_height']
         self.extrusion_ratio = 1.25
         self.extrusion_width = dflt_nozl_d * self.extrusion_ratio
         self.infill_width = infl_nozl_d * self.extrusion_ratio
         self.support_width = supp_nozl_d * self.extrusion_ratio
         height = self.model.points.maxz - self.model.points.minz
-        layer_cnt = int(height / layer_h)
-        self.model.assign_layers(layer_h)
+        self.layers = int(height / self.layer_h)
+        self.model.assign_layers(self.layer_h)
         self.layer_zs = [
-            self.model.points.minz + layer_h * (layer + 1)
-            for layer in range(layer_cnt)
+            self.model.points.minz + self.layer_h * (layer + 1)
+            for layer in range(self.layers)
         ]
-        thermo = TextThermometer(layer_cnt)
+        self.thermo = TextThermometer(self.layers)
 
-        print("Stage 1: Perimeters")
-        (
-            self.layer_paths,
-            self.overhang_masks,
-            self.perimeter_paths
-        ) = zip(
-            *list(
-                map(
-                    Slicer._slicer_task_1,
-                    self.layer_zs,
-                    range(layer_cnt),
-                    [thermo] * layer_cnt,
-                    [self.extrusion_width] * layer_cnt,
-                    [self.support_width] * layer_cnt,
-                    [layer_h] * layer_cnt,
-                    [self.conf] * layer_cnt,
-                    [self.model] * layer_cnt
-                )
-            )
-        )
-        thermo.clear()
+        print("Perimeters")
+        self._slicer_task_perimeters()
 
-        print("Stage 2: Generate Masks")
-        overhang_drops = Slicer._slicer_task_2a(
-            self.conf,
-            self.overhang_masks,
-            self.layer_paths
-        )
+        print("Support")
+        self._slicer_task_support()
 
-        top_masks, bot_masks = zip(
-            *list(
-                map(
-                    Slicer._slicer_task_2b,
-                    range(layer_cnt),
-                    [thermo] * layer_cnt,
-                    [([] if i < 1 else self.perimeter_paths[i-1][-1]) for i in range(layer_cnt)],
-                    [p[-1] for p in self.perimeter_paths],
-                    [([] if i >= layer_cnt-1 else self.perimeter_paths[i+1][-1]) for i in range(layer_cnt)]
-                )
-            )
-        )
-        thermo.clear()
+        print("Raft, Brim, and Skirt")
+        self._slicer_task_adhesion()
 
-        print("Stage 3: Support & Raft")
-        (
-            self.support_outline,
-            self.support_infill
-        ) = zip(
-            *list(
-                map(
-                    Slicer._slicer_task_3b,
-                    range(layer_cnt),
-                    [thermo] * layer_cnt,
-                    [self.conf] * layer_cnt,
-                    [self.support_width] * layer_cnt,
-                    overhang_drops
-                )
-            )
-        )
-        del overhang_drops
-        thermo.clear()
-
-        print("Stage 4: Layer Path Generation")
-        (
-            self.raft_outline,
-            self.raft_infill,
-            self.brim_paths,
-            self.skirt_paths,
-            self.priming_paths
-        ) = self._slicer_task_4a(
-            self.support_width,
-            self.conf,
-            self.layer_paths[0],
-            self.support_outline[0]
-        )
-
-        top_cnt = self.conf['top_layers']
-        bot_cnt = self.conf['bottom_layers']
-        thermo = TextThermometer(layer_cnt)
-        (
-            self.solid_infill,
-            self.sparse_infill
-        ) = zip(
-            *list(
-                map(
-                    self._slicer_task_4b,
-                    range(layer_cnt),
-                    [thermo] * layer_cnt,
-                    [self.extrusion_width] * layer_cnt,
-                    [self.infill_width] * layer_cnt,
-                    [self.conf] * layer_cnt,
-                    [top_masks[i : i+top_cnt] for i in range(layer_cnt)],
-                    [bot_masks[max(0, i-bot_cnt+1) : i+1] for i in range(layer_cnt)],
-                    self.perimeter_paths
-                )
-            )
-        )
-        thermo.clear()
-
-        del top_masks
-        del bot_masks
-
-        raft_layers = len(self.raft_infill)
-        for i in range(raft_layers):
-            self.layer_zs.append(self.layer_zs[-1]+layer_h)
-        for layer in range(len(self.layer_zs)):
-            self.layer_zs[layer] -= self.model.points.minz
+        print("Infill")
+        self._slicer_task_fill()
 
         print("Gcode Generation")
-        with open(filename, "w") as f:
-            f.write("( setup )\n")
-            f.write("M82 ;absolute extrusion mode\n")
-            f.write("M107 ;Fan off\n")
-            if self.conf['heated_bed_temp'] > 0:
-                f.write("M140 S{:d} ;set bed temp\n".format(self.conf['heated_bed_temp']))
-                f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['heated_bed_temp']))
-            f.write("M104 S{:d} ;set extruder0 temp\n".format(self.conf['nozzle_0_temp']))
-            f.write("M109 S{:d} ;wait for extruder0 temp\n".format(self.conf['nozzle_0_temp']))
-            f.write("G28 ;auto-home all axes\n")
-            f.write("G1 Z15 F6000 ;raise extruder\n")
-            f.write("G92 E0\n")
-            f.write("G1 F200 E3\n")
-            f.write("G92 E0\n")
+        self._slicer_task_gcode(filename)
 
-            if self.raft_outline:
-                f.write("( raft_outline )\n")
-                outline = geom.close_paths(self.raft_outline)
-                for line in self._paths_gcode(outline, self.support_width, supp_nozl, self.layer_zs[0]):
-                    f.write(line)
-            if self.raft_infill:
-                f.write("( raft_infill )\n")
-                for layer, layer_paths in enumerate(self.raft_infill):
-                    for line in self._paths_gcode(layer_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
-                        f.write(line)
-
-            layer = raft_layers
-            if self.priming_paths:
-                f.write("( priming )\n")
-                paths = geom.close_paths(self.priming_paths)
-                for line in self._paths_gcode(paths, self.support_width, supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-            if self.skirt_paths:
-                f.write("( skirt )\n")
-                for line in self._paths_gcode(self.skirt_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-            if self.brim_paths:
-                f.write("( brim )\n")
-                for line in self._paths_gcode(self.brim_paths, self.support_width, supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-            for slicenum in range(len(self.perimeter_paths)):
-                layer = raft_layers + slicenum
-                thermo.update(slicenum)
-                outline = geom.close_paths(self.support_outline[slicenum])
-                f.write("( support outline )\n")
-                for line in self._paths_gcode(outline, self.support_width, supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-                f.write("( support infill )\n")
-                for line in self._paths_gcode(self.support_infill[slicenum], self.support_width, supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-                f.write("( perimeters )\n")
-                for paths in reversed(self.perimeter_paths[slicenum]):
-                    paths = geom.close_paths(paths)
-                    for line in self._paths_gcode(paths, self.extrusion_width, dflt_nozl, self.layer_zs[layer]):
-                        f.write(line)
-                f.write("( solid fill )\n")
-                for line in self._paths_gcode(self.solid_infill[slicenum], self.extrusion_width, dflt_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-                f.write("( sparse infill )\n")
-                for line in self._paths_gcode(self.sparse_infill[slicenum], self.infill_width, infl_nozl, self.layer_zs[layer]):
-                    f.write(line)
-            thermo.clear()
         print("Slicing complete")
 
         if showgui:
@@ -450,160 +288,162 @@ class Slicer(object):
 
     ############################################################
 
-    # cut: model
-    #   layer_paths
-    # overhang_mask: model
-    #   overhang_masks
-    # perimeter: layer_paths
-    #   perimeter_paths
-    # brim: layer_paths[0]
-    #   brim_paths
-    # skirt: layer_paths[0]
-    #   skirt_paths
-    #   priming_paths
+    def _slicer_task_perimeters(self):
+        self.layer_paths = []
+        self.perimeter_paths = []
+        self.thermo.set_target(2*self.layers)
+        for layer in range(self.layers):
+            self.thermo.update(layer)
 
-    # overhang_drop: layer_paths[*] overhang_masks[*]
-    #   overhang_drops
-    # top_bottom_mask: perimeter_paths[*]
-    #   top_masks
-    #   bot_masks
+            # Layer Slicing
+            z = self.layer_zs[layer]
+            paths = self.model.slice_at_z(z - self.layer_h/2, self.layer_h)
+            paths = geom.orient_paths(paths)
+            paths = geom.union(paths, [])
+            self.layer_paths.append(paths)
 
-    # support: overhang_drops[*]
-    #    support_outline
-    #    support_infill
-    # raft: support_outline[0] layer_paths[0]
-    #   raft_outline
-    #   raft_infill
+            # Perimeters
+            perims = []
+            for i in range(self.conf['shell_count']):
+                shell = geom.offset(paths, -(i+0.5) * self.extrusion_width)
+                shell = geom.close_paths(shell)
+                perims.append(shell)
+            self.perimeter_paths.append(perims)
 
-    # solid_mask: top_masks[*] bot_masks[*]
-    #   solid_masks
-    # solid_infill: solid_masks
-    #   solid_infill
-    # sparse_infill: perimeter_paths solid_masks
-    #   sparse_infill
+        self.top_masks = []
+        self.bot_masks = []
+        for layer in range(self.layers):
+            self.thermo.update(self.layers+layer)
 
-    ############################################################
+            # Top and Bottom masks
+            below = [] if layer < 1 else self.perimeter_paths[layer-1][-1]
+            perim = self.perimeter_paths[layer][-1]
+            above = [] if layer >= self.layers-1 else self.perimeter_paths[layer+1][-1]
+            self.top_masks.append(geom.diff(perim, above))
+            self.bot_masks.append(geom.diff(perim, below))
+        self.thermo.clear()
 
-    # Stage 1: Perimeters
-    @staticmethod
-    def _slicer_task_1(z, layer, thermo, ewidth, suppwidth, layer_h, conf, model):
-        thermo.update(layer)
+    def _slicer_task_support(self):
+        self.thermo.set_target(4.0)
 
-        # Layer Slicing
-        paths = model.slice_at_z(z - layer_h/2, layer_h)
-        paths = geom.orient_paths(paths)
-        paths = geom.union(paths, [])
-
-        # Overhang Masks
-        supp_ang = conf['overhang_angle']
-        ohoff = layer_h * math.tan(supp_ang * math.pi / 180.0)
-        overhang = geom.offset(paths, ohoff - 0.5 * ewidth)
-
-        # Perimeters
-        perims = []
-        for i in range(conf['shell_count']):
-            shell = geom.offset(paths, -(i+0.5) * ewidth)
-            shell = geom.close_paths(shell)
-            perims.append(shell)
-
-        return paths, overhang, perims
-
-    # Stage 2: Generate Masks
-    @staticmethod
-    def _slicer_task_2a(conf, overhang_masks, layer_paths):
-        # Overhang Drops
-        layers = len(overhang_masks)
-        outset = conf['support_outset']
-        supp_type = conf['support_type']
+        self.support_outline = []
+        self.support_infill = []
+        supp_type = self.conf['support_type']
         if supp_type == 'None':
-            return []
-        layer_overhangs = []
-        drop_paths = []
-        for layer in reversed(range(layers)):
-            layer_above = [] if layer >= layers-1 else layer_paths[layer + 1]
-            overhang = geom.diff(layer_above, overhang_masks[layer])
-            drop_paths = geom.union(drop_paths, overhang)
-            layer_overhangs.append(drop_paths)
-        layer_overhangs.reverse()
-        cumulative_mask = []
-        support_masks = []
-        for layer in range(layers):
-            if supp_type == 'External':
-                cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer], outset))
-            elif supp_type == 'Everywhere':
-                cumulative_mask = geom.offset(layer_paths[layer], outset)
-                if layer > 0:
-                    cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer-1], outset))
-            if layer < layers-1:
-                cumulative_mask = geom.union(cumulative_mask, geom.offset(layer_paths[layer+1], outset))
-            support_masks.append(geom.diff(layer_overhangs[layer], cumulative_mask))
-        return support_masks
+            return
+        supp_ang = self.conf['overhang_angle']
+        outset = self.conf['support_outset']
 
-    @staticmethod
-    def _slicer_task_2b(layer, thermo, below, perim, above):
-        thermo.update(layer)
-        # Top and Bottom masks
-        top_mask = geom.diff(perim, above)
-        bot_mask = geom.diff(perim, below)
-        return top_mask, bot_mask
+        facets = self.model.get_facets()
+        facet_cnt = len(facets)
+        drop_paths = [[] for layer in range(self.layers)]
+        for fnum, facet in enumerate(facets):
+            self.thermo.update((fnum+0.0)/facet_cnt)
+            if facet.overhang_angle() < supp_ang:
+                continue
+            minz, maxz = facet.z_range()
+            footprint = facet.get_footprint()
+            if not footprint:
+                break
+            for layer in range(self.layers):
+                z = self.layer_zs[layer]
+                if z > maxz:
+                    break
+                if z >= minz:
+                    footprint = facet.get_footprint(z=z)
+                    if not footprint:
+                        break
+                drop_paths[layer].append(footprint)
+                # drop_paths[layer] = geom.union(drop_paths[layer], [footprint])
 
-    # Stage 3: Support & Raft
-    @staticmethod
-    def _slicer_task_3b(layer, thermo, conf, ewidth, overhangs):
-        thermo.update(layer)
-        # Support
-        outline = []
-        infill = []
-        density = conf['support_density'] / 100.0
-        if density > 0.0:
-            outline = geom.offset(overhangs, -ewidth/2.0)
-            outline = geom.close_paths(outline)
-            mask = geom.offset(outline, conf['infill_overlap']-ewidth)
-            bounds = geom.paths_bounds(mask)
-            lines = geom.make_infill_lines(bounds, 0, density, ewidth)
-            infill = geom.clip(lines, mask, subj_closed=False)
-        return outline, infill
+        cumm_mask = []
+        for layer in range(self.layers):
+            self.thermo.update(1 + (0.0+layer)/self.layers)
 
-    # Stage 4: Layer Path Generation
-    @staticmethod
-    def _slicer_task_4a(ewidth, conf, layer_paths, supp_outline):
+            # Remove areas too close to model
+            mask = geom.offset(self.layer_paths[layer], outset)
+            if layer > 0 and supp_type == "Everywhere":
+                mask = geom.union(mask, geom.offset(self.layer_paths[layer-1], outset))
+            if layer < self.layers - 1:
+                mask = geom.union(mask, geom.offset(self.layer_paths[layer+1], outset))
+            if supp_type == "External":
+                cumm_mask = geom.union(cumm_mask, mask)
+                mask = cumm_mask
+            overhang = geom.diff(drop_paths[layer], mask)
+
+            # Clean up overhang paths
+            overhang = geom.offset(overhang, self.extrusion_width)
+            overhang = geom.offset(overhang, -self.extrusion_width*2)
+            overhang = geom.offset(overhang, self.extrusion_width)
+            drop_paths[layer] = geom.close_paths(overhang)
+
+        for layer in range(self.layers):
+            self.thermo.update(2 + (2.0+layer)/self.layers)
+
+            # Generate support infill
+            outline = []
+            infill = []
+            overhangs = drop_paths[layer]
+            density = self.conf['support_density'] / 100.0
+            if density > 0.0:
+                outline = geom.offset(overhangs, -self.extrusion_width/2.0)
+                outline = geom.close_paths(outline)
+                mask = geom.offset(outline, self.conf['infill_overlap']-self.extrusion_width)
+                bounds = geom.paths_bounds(mask)
+                lines = geom.make_infill_lines(bounds, 0, density, self.extrusion_width)
+                infill = geom.clip(lines, mask, subj_closed=False)
+            self.support_outline.append(outline)
+            self.support_infill.append(infill)
+
+        self.thermo.clear()
+
+    # Adhesion Paths
+    def _slicer_task_adhesion(self):
         # Raft
         raft_outline = []
         raft_infill = []
-        if conf['adhesion_type'] == "Raft":
-            rings = int(math.ceil(conf['brim_width']/ewidth))
-            outset = max(conf['skirt_outset']+ewidth*conf['skirt_loops'], conf['raft_outset'])
-            paths = geom.union(layer_paths, supp_outline)
+        if self.conf['adhesion_type'] == "Raft":
+            rings = int(math.ceil(self.conf['brim_width']/self.extrusion_width))
+            outset = max(self.conf['skirt_outset']+self.extrusion_width*self.conf['skirt_loops'], self.conf['raft_outset'])
+            paths = geom.union(self.layer_paths[0], self.support_outline[0])
             raft_outline = geom.offset(paths, outset)
             bounds = geom.paths_bounds(raft_outline)
-            mask = geom.offset(raft_outline, conf['infill_overlap']-ewidth)
-            lines = geom.make_infill_lines(bounds, 0, 0.75, ewidth)
+            mask = geom.offset(raft_outline, self.conf['infill_overlap']-self.extrusion_width)
+            lines = geom.make_infill_lines(bounds, 0, 0.75, self.extrusion_width)
             raft_infill.append(geom.clip(lines, mask, subj_closed=False))
-            for layer in range(conf['raft_layers']-1):
+            raft_layers = self.conf['raft_layers']
+            for layer in range(raft_layers-1):
                 base_ang = 90 * ((layer+1) % 2)
-                lines = geom.make_infill_lines(bounds, base_ang, 1.0, ewidth)
+                lines = geom.make_infill_lines(bounds, base_ang, 1.0, self.extrusion_width)
                 raft_infill.append(geom.clip(lines, raft_outline, subj_closed=False))
+                self.layer_zs.append(self.layer_zs[-1]+self.layer_h)
+        self.raft_outline = geom.close_paths(raft_outline)
+        self.raft_infill = raft_infill
+        for layer in range(len(self.layer_zs)):
+            self.layer_zs[layer] -= self.model.points.minz
 
         # Brim
         brim = []
-        adhesion = conf['adhesion_type']
-        brim_w = conf['brim_width']
+        adhesion = self.conf['adhesion_type']
+        brim_w = self.conf['brim_width']
         if adhesion == "Brim":
-            rings = int(math.ceil(brim_w/ewidth))
+            rings = int(math.ceil(brim_w/self.extrusion_width))
             for i in range(rings):
-                for path in geom.offset(layer_paths, (i+0.5)*ewidth):
+                for path in geom.offset(self.layer_paths[0], (i+0.5)*self.extrusion_width):
                     if path[-1] != path[0]:
                         path.append(path[0])
                     brim.append(path)
+        self.brim_paths = geom.close_paths(brim)
 
         # Skirt
         skirt = []
         priming = []
-        skirt_w = conf['skirt_outset']
-        minloops = conf['skirt_loops']
-        minlen = conf['skirt_min_len']
-        skirt_mask = geom.union(layer_paths, supp_outline)
-        skirt = geom.offset(skirt_mask, brim_w + skirt_w + ewidth/2.0)
+        skirt_w = self.conf['skirt_outset']
+        minloops = self.conf['skirt_loops']
+        minlen = self.conf['skirt_min_len']
+        skirt_mask = geom.union(self.layer_paths[0], self.support_outline[0])
+        skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
+        self.skirt_paths = geom.close_paths(skirt)
         plen = max(
             1.0,
             sum(
@@ -615,65 +455,143 @@ class Slicer(object):
         if adhesion != "Raft":
             loops = max(loops, int(math.ceil(minlen/plen)))
         for i in range(loops-1):
-            for path in geom.offset(skirt, (i+1)*ewidth):
+            for path in geom.offset(skirt, (i+1)*self.extrusion_width):
                 priming.append(path)
+        self.priming_paths = geom.close_paths(priming)
+        self.thermo.clear()
 
-        return (
-            geom.close_paths(raft_outline),
-            raft_infill,
-            geom.close_paths(brim),
-            geom.close_paths(skirt),
-            geom.close_paths(priming)
-        )
+    # Infill Paths
+    def _slicer_task_fill(self):
+        self.thermo.set_target(self.layers)
 
-    @staticmethod
-    def _slicer_task_4b(layer, thermo, ewidth, iwidth, conf, top_masks, bot_masks, perims):
-        # Solid Mask
-        thermo.update(layer)
-        outmask = []
-        for mask in top_masks:
-            outmask = geom.union(outmask, geom.close_paths(mask))
-        for mask in bot_masks:
-            outmask = geom.union(outmask, geom.close_paths(mask))
-        solid_mask = geom.clip(outmask, perims[-1])
-        bounds = geom.paths_bounds(perims[-1])
+        self.solid_infill = []
+        self.sparse_infill = []
+        for layer in range(self.layers):
+            self.thermo.update(layer)
+            # Solid Mask
+            top_cnt = self.conf['top_layers']
+            bot_cnt = self.conf['bottom_layers']
+            top_masks = self.top_masks[layer : layer+top_cnt]
+            perims = self.perimeter_paths[layer]
+            bot_masks = self.bot_masks[max(0, layer-bot_cnt+1) : layer+1]
+            outmask = []
+            for mask in top_masks:
+                outmask = geom.union(outmask, geom.close_paths(mask))
+            for mask in bot_masks:
+                outmask = geom.union(outmask, geom.close_paths(mask))
+            solid_mask = geom.clip(outmask, perims[-1])
+            bounds = geom.paths_bounds(perims[-1])
 
-        # Solid Infill
-        solid_infill = []
-        base_ang = 45 if layer % 2 == 0 else -45
-        solid_mask = geom.offset(solid_mask, conf['infill_overlap']-ewidth)
-        lines = geom.make_infill_lines(bounds, base_ang, 1.0, ewidth)
-        for line in lines:
-            lines = [line]
-            lines = geom.clip(lines, solid_mask, subj_closed=False)
-            solid_infill.extend(lines)
+            # Solid Infill
+            solid_infill = []
+            base_ang = 45 if layer % 2 == 0 else -45
+            solid_mask = geom.offset(solid_mask, self.conf['infill_overlap']-self.extrusion_width)
+            lines = geom.make_infill_lines(bounds, base_ang, 1.0, self.extrusion_width)
+            for line in lines:
+                lines = [line]
+                lines = geom.clip(lines, solid_mask, subj_closed=False)
+                solid_infill.extend(lines)
+            self.solid_infill.append(solid_infill)
 
-        # Sparse Infill
-        sparse_infill = []
-        infill_type = conf['infill_type']
-        density = conf['infill_density'] / 100.0
-        if density > 0.0:
-            if density >= 0.99:
-                infill_type = "Lines"
-            mask = geom.offset(perims[-1], conf['infill_overlap']-iwidth)
-            mask = geom.diff(mask, solid_mask)
-            if infill_type == "Lines":
-                base_ang = 90 * (layer % 2) + 45
-                lines = geom.make_infill_lines(bounds, base_ang, density, iwidth)
-            elif infill_type == "Triangles":
-                base_ang = 60 * (layer % 3)
-                lines = geom.make_infill_triangles(bounds, base_ang, density, iwidth)
-            elif infill_type == "Grid":
-                base_ang = 90 * (layer % 2) + 45
-                lines = geom.make_infill_grid(bounds, base_ang, density, iwidth)
-            elif infill_type == "Hexagons":
-                base_ang = 120 * (layer % 3)
-                lines = geom.make_infill_hexagons(bounds, base_ang, density, iwidth)
-            else:
-                lines = []
-            lines = geom.clip(lines, mask, subj_closed=False)
-            sparse_infill.extend(lines)
-        return solid_infill, sparse_infill
+            # Sparse Infill
+            sparse_infill = []
+            infill_type = self.conf['infill_type']
+            density = self.conf['infill_density'] / 100.0
+            if density > 0.0:
+                if density >= 0.99:
+                    infill_type = "Lines"
+                mask = geom.offset(perims[-1], self.conf['infill_overlap']-self.infill_width)
+                mask = geom.diff(mask, solid_mask)
+                if infill_type == "Lines":
+                    base_ang = 90 * (layer % 2) + 45
+                    lines = geom.make_infill_lines(bounds, base_ang, density, self.infill_width)
+                elif infill_type == "Triangles":
+                    base_ang = 60 * (layer % 3)
+                    lines = geom.make_infill_triangles(bounds, base_ang, density, self.infill_width)
+                elif infill_type == "Grid":
+                    base_ang = 90 * (layer % 2) + 45
+                    lines = geom.make_infill_grid(bounds, base_ang, density, self.infill_width)
+                elif infill_type == "Hexagons":
+                    base_ang = 120 * (layer % 3)
+                    lines = geom.make_infill_hexagons(bounds, base_ang, density, self.infill_width)
+                else:
+                    lines = []
+                lines = geom.clip(lines, mask, subj_closed=False)
+                sparse_infill.extend(lines)
+            self.sparse_infill.append(sparse_infill)
+        self.thermo.clear()
+
+    def _slicer_task_gcode(self, filename):
+        self.thermo.set_target(self.layers)
+
+        raft_layers = len(self.raft_infill)
+        with open(filename, "w") as f:
+            f.write("( setup )\n")
+            f.write("M82 ;absolute extrusion mode\n")
+            f.write("M107 ;Fan off\n")
+            if self.conf['heated_bed_temp'] > 0:
+                f.write("M140 S{:d} ;set bed temp\n".format(self.conf['heated_bed_temp']))
+                f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['heated_bed_temp']))
+            f.write("M104 S{:d} ;set extruder0 temp\n".format(self.conf['nozzle_0_temp']))
+            f.write("M109 S{:d} ;wait for extruder0 temp\n".format(self.conf['nozzle_0_temp']))
+            f.write("G28 ;auto-home all axes\n")
+            f.write("G1 Z15 F6000 ;raise extruder\n")
+            f.write("G92 E0\n")
+            f.write("G1 F200 E3\n")
+            f.write("G92 E0\n")
+
+            if self.raft_outline:
+                f.write("( raft_outline )\n")
+                outline = geom.close_paths(self.raft_outline)
+                for line in self._paths_gcode(outline, self.support_width, self.supp_nozl, self.layer_zs[0]):
+                    f.write(line)
+            if self.raft_infill:
+                f.write("( raft_infill )\n")
+                for layer, layer_paths in enumerate(self.raft_infill):
+                    for line in self._paths_gcode(layer_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                        f.write(line)
+
+            layer = raft_layers
+            if self.priming_paths:
+                f.write("( priming )\n")
+                paths = geom.close_paths(self.priming_paths)
+                for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                    f.write(line)
+
+            if self.skirt_paths:
+                f.write("( skirt )\n")
+                for line in self._paths_gcode(self.skirt_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                    f.write(line)
+
+            if self.brim_paths:
+                f.write("( brim )\n")
+                for line in self._paths_gcode(self.brim_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                    f.write(line)
+
+            for slicenum in range(len(self.perimeter_paths)):
+                layer = raft_layers + slicenum
+                self.thermo.update(slicenum)
+                outline = geom.close_paths(self.support_outline[slicenum])
+                f.write("( support outline )\n")
+                for line in self._paths_gcode(outline, self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                    f.write(line)
+                f.write("( support infill )\n")
+                for line in self._paths_gcode(self.support_infill[slicenum], self.support_width, self.supp_nozl, self.layer_zs[layer]):
+                    f.write(line)
+
+                f.write("( perimeters )\n")
+                for paths in reversed(self.perimeter_paths[slicenum]):
+                    paths = geom.close_paths(paths)
+                    for line in self._paths_gcode(paths, self.extrusion_width, self.dflt_nozl, self.layer_zs[layer]):
+                        f.write(line)
+                f.write("( solid fill )\n")
+                for line in self._paths_gcode(self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl, self.layer_zs[layer]):
+                    f.write(line)
+
+                f.write("( sparse infill )\n")
+                for line in self._paths_gcode(self.sparse_infill[slicenum], self.infill_width, self.infl_nozl, self.layer_zs[layer]):
+                    f.write(line)
+            self.thermo.clear()
 
     ############################################################
 

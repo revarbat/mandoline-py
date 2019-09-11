@@ -100,13 +100,39 @@ class Facet3D(object):
             out -= p2[0] * p1[1]
         return out
 
-    def get_footprint(self):
-        path = [v[0:2] for v in self.vertices]
+    def _z_intercept(self,p1,p2,z):
+        if p1[2] > z and p2[2] > z:
+            return None
+        if p1[2] < z and p2[2] < z:
+            return None
+        if p1[2] == z and p2[2] == z:
+            return None
+        u = (0.0+z-p1[2])/(p2[2]-p1[2])
+        delta = [p2[a]-p1[a] for a in range(3)]
+        return [delta[a]*u+p1[a] for a in range(3)]
+
+
+    def get_footprint(self, z=None):
+        if z is None:
+            path = [v[0:2] for v in self.vertices]
+        else:
+            opath = list(self.vertices) + [self.vertices[0]]
+            path = []
+            zed = zip(opath[:-1], opath[1:])
+            for v1,v2 in zed:
+                if v1[2] > z:
+                    path.append(v1[0:2])
+                if (v1[2] > z and v2[2] < z) or (v1[2] < z and v2[2] > z):
+                    icept = self._z_intercept(v1,v2,z)
+                    if icept:
+                        path.append(icept[0:2])
+        if not path:
+            return None
         a = self._shoestring_algorithm(path)
         if a == 0:
             return None
         if a > 0:  # counter-clockwise
-            path = reversed(path)[:]
+            path = list(reversed(path))
         return path
 
     def overhang_angle(self):

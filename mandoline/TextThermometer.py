@@ -9,10 +9,13 @@ class TextThermometer(object):
         self.target = target
         self.last_time = time.time()
         self.update_period = update_period
+        self.spincnt = 0
+        self.spinchars = r'/-\|'
 
     def set_target(self, target):
         self.target = target
         self.last_time = time.time()
+        self.spincnt = 0
 
     def update(self, value):
         self.value = value
@@ -20,7 +23,9 @@ class TextThermometer(object):
         if now - self.last_time >= self.update_period:
             self.last_time = now
             pct = 100.0 * self.value / self.target
-            print("\r  [{:50s}] {:.1f}%".format("="*int(pct/2), pct), end="")
+            self.spincnt = (self.spincnt + 1) % len(self.spinchars)
+            spinchar = "" if pct >= 100.0 else self.spinchars[self.spincnt]
+            print("\r  [{:50s}] {:.1f}%".format("="*int(pct/2) + spinchar, pct), end="")
             sys.stdout.flush()
 
     def clear(self):
