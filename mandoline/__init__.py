@@ -49,7 +49,7 @@ def main():
             if not manifold:
                 sys.exit(-1)
 
-    slicer = Slicer(stl)
+    slicer = Slicer([stl])
 
     slicer.load_configs()
     if args.set_option:

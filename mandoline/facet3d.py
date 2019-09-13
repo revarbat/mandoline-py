@@ -111,6 +111,10 @@ class Facet3D(object):
         delta = [p2[a]-p1[a] for a in range(3)]
         return [delta[a]*u+p1[a] for a in range(3)]
 
+    def translate(self, offset):
+        for a in range(3):
+            for v in self.vertices:
+                v[a] += offset[a]
 
     def get_footprint(self, z=None):
         if z is None:
@@ -236,6 +240,32 @@ class Facet3DCache(object):
         self.vertex_hash = {}
         self.edge_hash = {}
         self.facet_hash = {}
+
+    def rehash(self):
+        """Rebuild the facet caches."""
+        oldhash = self.facet_hash
+        self.vertex_hash = {}
+        self.edge_hash = {}
+        self.facet_hash = {}
+        for facet in oldhash.values():
+            self._rehash_facet(facet)
+
+    def _rehash_facet(self, facet):
+        """Re-adds a facet to the caches."""
+        pts = tuple(facet[a] for a in range(3))
+        self.facet_hash[pts] = facet
+        self._add_edge(pts[0], pts[1], facet)
+        self._add_edge(pts[1], pts[2], facet)
+        self._add_edge(pts[2], pts[0], facet)
+        self._add_vertex(pts[0], facet)
+        self._add_vertex(pts[1], facet)
+        self._add_vertex(pts[2], facet)
+
+    def translate(self, offset):
+        """Translates vertices of all facets in the facet cache."""
+        for facet in self.facet_hash.values():
+            facet.translate(offset)
+        self.rehash()
 
     def _add_vertex(self, pt, facet):
         """Remember that a given vertex touches a given facet."""

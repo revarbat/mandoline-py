@@ -66,6 +66,11 @@ class LineSegment3D(object):
         """Returns a human readable coordinate string."""
         return "{0:a}".format(self)
 
+    def translate(self,offset):
+        """Translate the endpoint's vertices"""
+        self.p1 = (self.p1[a] + offset[a] for a in range(3))
+        self.p2 = (self.p2[a] + offset[a] for a in range(3))
+
     def length(self):
         """Returns the length of the line."""
         return self.p1.distFromPoint(self.p2)
@@ -80,11 +85,33 @@ class LineSegment3DCache(object):
         self.seghash = {}
 
     def _add_endpoint(self, p, seg):
+        """Remember that this segment has a given endpoint"""
         if p not in self.endhash:
             self.endhash[p] = []
         self.endhash[p].append(seg)
 
+    def rehash(self):
+        """Reset the hashes for changed edge vertices"""
+        oldseghash = self.seghash
+        self.seghash = {
+            (v[0], v[1]): v
+            for v in oldseghash.values()
+        }
+        oldendhash = self.endhash
+        self.endhash = {
+            k: v
+            for v in oldendhash.values()
+            for k in v
+        }
+
+    def translate(self,offset):
+        """Translate vertices of all edges."""
+        for v in self.seghash.values():
+            v.translate(offset)
+        self.rehash()
+
     def endpoint_segments(self, p):
+        """get list of edges that end at point p"""
         if p not in self.endhash:
             return []
         return self.endhash[p]

@@ -61,6 +61,7 @@ class StlData(object):
         return self.points.add(*point)
 
     def quantz(self, pt, quanta=1e-3):
+        """Quantize the Z coordinate of the given point so that it won't be exactly on a layer."""
         x, y, z = pt
         z = math.floor(z / quanta + 0.5) * quanta
         return (x, y, z)
@@ -119,6 +120,7 @@ class StlData(object):
         return self.facets.add(v1, v2, v3, normal)
 
     def read_file(self, filename):
+        """Read the model data from the given STL file."""
         self.filename = filename
         print("Loading model")
         file_size = os.path.getsize(filename)
@@ -180,6 +182,7 @@ class StlData(object):
                 ))
 
     def write_file(self, filename, binary=False):
+        """Write the model data to an STL file."""
         if binary:
             self._write_binary_file(filename)
         else:
@@ -195,6 +198,7 @@ class StlData(object):
         return [edge for edge in self.edges if edge.count > 2]
 
     def check_manifold(self, verbose=False):
+        """Validate if the model is manifold, and therefore printable."""
         is_manifold = True
         self.dupe_faces = self._check_manifold_duplicate_faces()
         for face in self.dupe_faces:
@@ -219,7 +223,21 @@ class StlData(object):
     def get_edges(self):
         return self.edges
 
+    def center(self, cp):
+        """Centers the model at the given centerpoint cp."""
+        cx = (self.points.minx + self.points.maxx)/2.0
+        cy = (self.points.miny + self.points.maxy)/2.0
+        cz = (self.points.minz + self.points.maxz)/2.0
+        self.translate((cp[0]-cx, cp[1]-cy, cp[2]-cz))
+
+    def translate(self, offset):
+        """Translates vertices of all facets in the STL model."""
+        self.points.translate(offset)
+        self.edges.translate(offset)
+        self.facets.translate(offset)
+
     def assign_layers(self, layer_height):
+        """Calculate which layers intersect which facets, for faster lookup."""
         self.layer_facets = {}
         for facet in self.facets:
             minz, maxz = facet.z_range()
@@ -231,11 +249,13 @@ class StlData(object):
                 self.layer_facets[layer].append(facet)
 
     def get_layer_facets(self, layer):
+        """Get all facets that intersect the given layer."""
         if layer not in self.layer_facets:
             return []
         return self.layer_facets[layer]
 
     def slice_at_z(self, z, layer_h):
+        """Get paths outlines of where this model intersects the given Z level."""
 
         def ptkey(pt):
             return "{0:.3f}, {1:.3f}".format(pt[0], pt[1])

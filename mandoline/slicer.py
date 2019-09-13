@@ -57,39 +57,44 @@ slicer_configs = OrderedDict([
         ('retract_lift',      float,   0.0, (0., 10.),  "Distance to lift the extruder head during retracted moves. (mm)"),
     )),
     ('Machine', (
-        ('heated_bed_temp',   int,     70, (0, 150),   "The temperature to set the heated bed to."),
+        ('bed_geometry',      list, 'Rectangular', ('Rectangular', 'Cylindrical'), "The shape of the build volume cross-section."),
+        ('bed_size_x',        float,  200, (0,1000),   "The X-axis size of the build platform bed."),
+        ('bed_size_y',        float,  200, (0,1000),   "The Y-axis size of the build platform bed."),
+        ('bed_center_x',      float,  100, (-500,500), "The X coordinate of the center of the bed."),
+        ('bed_center_y',      float,  100, (-500,500), "The Y coordinate of the center of the bed."),
+        ('bed_temp',          int,     70, (0, 150),   "The temperature to set the heated bed to."),
 
         ('extruder_count',    int,      1, (1, 4),     "The number of extruders this machine has."),
         ('default_nozzle',    int,      0, (0, 7),     "The default extruder used for printing."),
         ('infill_nozzle',     int,     -1, (-1, 7),    "The extruder used for infill material.  -1 means use default nozzle."),
         ('support_nozzle',    int,     -1, (-1, 7),    "The extruder used for support material.  -1 means use default nozzle."),
 
-        ('nozzle_0_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
+        ('nozzle_0_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 0. (C)"),
         ('nozzle_0_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 0. (mm)"),
         ('nozzle_0_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 0. (mm)"),
-        ('nozzle_0_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 0. (mm)"),
-        ('nozzle_0_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 0. (mm)"),
+        ('nozzle_0_xoff',     float,  0.0, (-100, 100), "The X positional offset for extruder 0. (mm)"),
+        ('nozzle_0_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 0. (mm)"),
         ('nozzle_0_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 0. (mm^3/s)"),
 
-        ('nozzle_1_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 1. (C)"),
+        ('nozzle_1_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 1. (C)"),
         ('nozzle_1_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 1. (mm)"),
         ('nozzle_1_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 1. (mm)"),
-        ('nozzle_1_xoff',     float, 25.0, (-100., 100.), "The X positional offset for extruder 1. (mm)"),
-        ('nozzle_1_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 1. (mm)"),
+        ('nozzle_1_xoff',     float, 25.0, (-100, 100), "The X positional offset for extruder 1. (mm)"),
+        ('nozzle_1_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 1. (mm)"),
         ('nozzle_1_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 1. (mm^3/s)"),
 
-        ('nozzle_2_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 2. (C)"),
+        ('nozzle_2_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 2. (C)"),
         ('nozzle_2_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 2. (mm)"),
         ('nozzle_2_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 2. (mm)"),
-        ('nozzle_2_xoff',     float, -25., (-100., 100.), "The X positional offset for extruder 2. (mm)"),
-        ('nozzle_2_yoff',     float,  0.0, (-100., 100.), "The Y positional offset for extruder 2. (mm)"),
+        ('nozzle_2_xoff',     float, -25., (-100, 100), "The X positional offset for extruder 2. (mm)"),
+        ('nozzle_2_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 2. (mm)"),
         ('nozzle_2_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 2. (mm^3/s)"),
 
-        ('nozzle_3_temp',     int,    190, (150, 250),  "The temperature of the nozzle for extruder 3. (C)"),
+        ('nozzle_3_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 3. (C)"),
         ('nozzle_3_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 3. (mm)"),
         ('nozzle_3_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 3. (mm)"),
-        ('nozzle_3_xoff',     float,  0.0, (-100., 100.), "The X positional offset for extruder 3. (mm)"),
-        ('nozzle_3_yoff',     float, 25.0, (-100., 100.), "The Y positional offset for extruder 3. (mm)"),
+        ('nozzle_3_xoff',     float,  0.0, (-100, 100), "The X positional offset for extruder 3. (mm)"),
+        ('nozzle_3_yoff',     float, 25.0, (-100, 100), "The Y positional offset for extruder 3. (mm)"),
         ('nozzle_3_max_rate', float, 50.0, (0., 100.), "The maximum extrusion speed for extruder 3. (mm^3/s)"),
     )),
 ])
@@ -99,8 +104,8 @@ slicer_configs = OrderedDict([
 
 
 class Slicer(object):
-    def __init__(self, model, **kwargs):
-        self.model = model
+    def __init__(self, models, **kwargs):
+        self.models = models
         self.conf = {}
         self.conf_metadata = {}
         for key, opts in slicer_configs.items():
@@ -231,6 +236,7 @@ class Slicer(object):
         self.dflt_nozl = self.conf['default_nozzle']
         self.infl_nozl = self.conf['infill_nozzle']
         self.supp_nozl = self.conf['support_nozzle']
+        self.center_point = (self.conf['bed_center_x'], self.conf['bed_center_y'])
         if self.infl_nozl == -1:
             self.infl_nozl = self.dflt_nozl
         if self.supp_nozl == -1:
@@ -244,11 +250,13 @@ class Slicer(object):
         self.extrusion_width = dflt_nozl_d * self.extrusion_ratio
         self.infill_width = infl_nozl_d * self.extrusion_ratio
         self.support_width = supp_nozl_d * self.extrusion_ratio
-        height = self.model.points.maxz - self.model.points.minz
+        for model in self.models:
+            model.center( (self.center_point[0], self.center_point[1], -model.points.minz) )
+            model.assign_layers(self.layer_h)
+        height = max([model.points.maxz - model.points.minz for model in self.models])
         self.layers = int(height / self.layer_h)
-        self.model.assign_layers(self.layer_h)
         self.layer_zs = [
-            self.model.points.minz + self.layer_h * (layer + 1)
+            self.layer_h * (layer + 1)
             for layer in range(self.layers)
         ]
         self.thermo = TextThermometer(self.layers)
@@ -298,9 +306,11 @@ class Slicer(object):
 
             # Layer Slicing
             z = self.layer_zs[layer]
-            paths = self.model.slice_at_z(z - self.layer_h/2, self.layer_h)
-            paths = geom.orient_paths(paths)
-            paths = geom.union(paths, [])
+            paths = []
+            for model in self.models:
+                model_paths = model.slice_at_z(z - self.layer_h/2, self.layer_h)
+                model_paths = geom.orient_paths(model_paths)
+                paths = geom.union(paths, model_paths)
             self.layer_paths.append(paths)
 
             # Perimeters
@@ -338,7 +348,7 @@ class Slicer(object):
         supp_ang = self.conf['overhang_angle']
         outset = self.conf['support_outset']
 
-        facets = self.model.get_facets()
+        facets = [facet for model in self.models for facet in model.get_facets()]
         facet_cnt = len(facets)
         drop_paths = [[] for layer in range(self.layers)]
         for fnum, facet in enumerate(facets):
@@ -423,8 +433,6 @@ class Slicer(object):
                 self.layer_zs.append(self.layer_zs[-1]+self.layer_h)
         self.raft_outline = geom.close_paths(raft_outline)
         self.raft_infill = raft_infill
-        for layer in range(len(self.layer_zs)):
-            self.layer_zs[layer] -= self.model.points.minz
 
         # Brim
         brim = []
@@ -533,9 +541,9 @@ class Slicer(object):
             f.write("( setup )\n")
             f.write("M82 ;absolute extrusion mode\n")
             f.write("M107 ;Fan off\n")
-            if self.conf['heated_bed_temp'] > 0:
-                f.write("M140 S{:d} ;set bed temp\n".format(self.conf['heated_bed_temp']))
-                f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['heated_bed_temp']))
+            if self.conf['bed_temp'] > 0:
+                f.write("M140 S{:d} ;set bed temp\n".format(self.conf['bed_temp']))
+                f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['bed_temp']))
             f.write("M104 S{:d} ;set extruder0 temp\n".format(self.conf['nozzle_0_temp']))
             f.write("M109 S{:d} ;wait for extruder0 temp\n".format(self.conf['nozzle_0_temp']))
             f.write("G28 ;auto-home all axes\n")
@@ -723,15 +731,14 @@ class Slicer(object):
         self._draw_line(self.sparse_infill[layernum], colors=colors, ewidth=self.infill_width)
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
-        ptcache = self.model.points
         wincx = self.master.winfo_width() / 2
         wincy = self.master.winfo_height() / 2
         wincx = wincx if wincx > 1 else 400
         wincy = wincy if wincy > 1 else 300
-        minx = ptcache.minx
-        maxx = ptcache.maxx
-        miny = ptcache.miny
-        maxy = ptcache.maxy
+        minx = min(model.minx for model in self.models)
+        maxx = max(model.maxx for model in self.models)
+        miny = min(model.miny for model in self.models)
+        maxy = max(model.maxy for model in self.models)
         cx = (maxx + minx)/2.0
         cy = (maxy + miny)/2.0
         for pathnum, path in enumerate(paths):

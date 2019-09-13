@@ -41,6 +41,9 @@ class Point3D(object):
     def __len__(self):
         return 3
 
+    def __setitem__(self, idx, val):
+        self._values[idx] = val
+
     def __getitem__(self, idx):
         """Given a vertex number, returns a vertex coordinate vector."""
         if type(idx) is not slice and idx >= len(self._values):
@@ -104,6 +107,10 @@ class Point3D(object):
         """Returns a standard array syntax string of the coordinates."""
         return "{0:a}".format(self)
 
+    def translate(self, offset):
+        """Translates the coordinates of this point."""
+        self._values = [i + j for i, j in zip(offset, self._values)]
+
     def distFromPoint(self, v):
         """Returns the distance from another point."""
         return math.sqrt(sum(math.pow(x1-x2, 2.0) for x1, x2 in zip(v, self)))
@@ -149,6 +156,26 @@ class Point3DCache(object):
             self.minz = p[2]
         if p[2] > self.maxz:
             self.maxz = p[2]
+
+    def rehash(self):
+        """Rebuild the point cache."""
+        oldpthash = self.point_hash
+        self.point_hash = {
+            tuple(round(n, 4) for n in pt): pt
+            for pt in oldpthash.values()
+        }
+
+    def translate(self, offset):
+        """Translates all cached points."""
+        self.minx += offset[0]
+        self.maxx += offset[0]
+        self.miny += offset[1]
+        self.maxy += offset[1]
+        self.minz += offset[2]
+        self.maxz += offset[2]
+        for pt in self.point_hash.values():
+            pt.translate(offset)
+        self.rehash()
 
     def get_volume(self):
         """Returns the 3D volume that contains all the points in the cache."""
