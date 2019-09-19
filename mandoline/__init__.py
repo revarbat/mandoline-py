@@ -1,4 +1,5 @@
 import sys
+import os.path
 import argparse
 
 from .stl_data import StlData
@@ -14,11 +15,27 @@ def main():
                         help='Show sliced paths output in GUI.')
     parser.add_argument('-v', '--verbose', action="store_true",
                         help='Show verbose output.')
-    parser.add_argument('-S', '--set-option', action="append",
-                        metavar="OPTNAME=VALUE",
+
+    parser.add_argument('--no-raft', dest="set_option", action="append_const",
+                        const="adhesion_type=None", help='Force adhesion to not be generated.')
+    parser.add_argument('--raft', dest="set_option", action="append_const",
+                        const="adhesion_type=Raft", help='Force raft generation.')
+    parser.add_argument('--brim', dest="set_option", action="append_const",
+                        const="adhesion_type=Brim", help='Force brim generation.')
+
+    parser.add_argument('--no-support', dest="set_option", action="append_const",
+                        const="support_type=None", help='Force external support structure generation.')
+    parser.add_argument('--support', dest="set_option", action="append_const",
+                        const="support_type=External", help='Force external support structure generation.')
+    parser.add_argument('--support-all', dest="set_option", action="append_const",
+                        const="support_type=Everywhere", help='Force external support structure generation.')
+
+    parser.add_argument('-f', '--filament', metavar="MATERIAL,...",
+                        help='Configures extruder(s) for given materials, in order.  Ex: -f PLA,TPU,PVA')
+
+    parser.add_argument('-S', '--set-option', action="append", metavar="OPTNAME=VALUE",
                         help='Set a slicing config option.')
-    parser.add_argument('-q', '--query-option', action="append",
-                        metavar="OPTNAME",
+    parser.add_argument('-Q', '--query-option', action="append", metavar="OPTNAME",
                         help='Display a slicing config option value.')
     parser.add_argument('-w', '--write-configs', action="store_true",
                         help='Save any changed slicing config options.')
@@ -56,6 +73,18 @@ def main():
         for opt in args.set_option:
             key, val = opt.split('=', 1)
             slicer.set_config(key,val)
+    if args.filament:
+        materials = args.filament.lower().split(",")
+        for extnum,material in enumerate(materials):
+            if '{}_hotend_temp'.format(material) not in slicer.conf:
+                print("Unknown material: {}".format(material))
+                sys.exit(-1)
+        newbedtemp = max(slicer.conf['{}_bed_temp'.format(material)] for material in materials)
+        slicer.set_config("bed_temp", str(newbedtemp))
+        for extnum,material in enumerate(materials):
+            print("Configuring extruder{} for {}".format(extnum, material))
+            slicer.set_config("nozzle_{}_temp".format(extnum), str(slicer.conf['{}_hotend_temp'.format(material)]))
+            slicer.set_config("nozzle_{}_max_speed".format(extnum), str(slicer.conf['{}_max_speed'.format(material)]))
     if args.write_configs:
         slicer.save_configs()
     if args.query_option:
@@ -66,8 +95,12 @@ def main():
     if args.show_configs:
         slicer.display_configs_help(vals_only=True)
 
-    if args.outfile:
-        slicer.slice_to_file(args.outfile, showgui=args.gui_display)
+    if args.infile:
+        if args.outfile:
+            outfile = args.outfile
+        else:
+            outfile = os.path.splitext(args.infile)[0] + ".gcode"
+        slicer.slice_to_file(outfile, showgui=args.gui_display)
 
     sys.exit(0)
 

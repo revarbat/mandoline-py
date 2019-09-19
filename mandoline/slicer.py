@@ -11,15 +11,6 @@ import mandoline.geometry2d as geom
 from .TextThermometer import TextThermometer
 
 
-# Support:
-#   For External support type:
-#     Start with total footprint
-#     For each layer up from bottom, diff out layer outline (outset by support_outset) to calc layer support clip region
-#     Make array of parallel lines
-#     clip lines by layer clip region
-#     add clipped lines and clip region outline to layer output.
-
-
 slicer_configs = OrderedDict([
     ('Quality', (
         ('layer_height',      float,  0.2, (0.01, 0.5), "Slice layer height in mm."),
@@ -34,20 +25,20 @@ slicer_configs = OrderedDict([
         ('travel_rate_z',     float,   5., (0.1, 30.),  "Z-axis  motion speed (mm/s)"),
     )),
     ('Support', (
-        ('adhesion_type',     list, 'None', ('None', 'Brim', 'Raft'),           "What kind of base adhesion structure to add."),
         ('support_type',      list, 'External', ('None', 'External', 'Everywhere'), "What kind of support structure to add."),
         ('support_outset',    float,   0.5, (0., 2.),   "How far support structures should be printed away from model, horizontally."),
         ('support_density',   float,  33.0, (0., 100.), "Density of support structure internals."),
         ('overhang_angle',    int,      45, (0, 90),    "Angle from vertical that support structures should be printed for."),
     )),
-    ('Extras', (
+    ('Adhesion', (
+        ('adhesion_type',     list, 'None', ('None', 'Brim', 'Raft'), "What kind of base adhesion structure to add."),
+        ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
+        ('raft_layers',       int,      3, (1, 5),      "Number of layers to use in making the raft."),
+        ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
         ('skirt_loops',       int,      0, (0, 100),    "Print at least this many skirt loops to prime the extruder."),
         ('skirt_min_len',     float, 10.0, (0., 1000.), "Add extra loops on the first layer until we've extruded at least this amount."),
         ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
         ('skirt_layers',      int,      1, (1, 1000),   "Number of layers to print print the skirt on."),
-        ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
-        ('raft_layers',       int,      1, (1, 5),      "Number of layers to use in making the raft."),
-        ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
     )),
     ('Retraction', (
         ('retract_enable',    bool,   True, None,       "Enable filament retraction."),
@@ -56,46 +47,81 @@ slicer_configs = OrderedDict([
         ('retract_extruder',  float,   3.0, (0., 50.),  "Distance to retract filament on extruder change. (mm)"),
         ('retract_lift',      float,   0.0, (0., 10.),  "Distance to lift the extruder head during retracted moves. (mm)"),
     )),
+    ('Materials', (
+        ('abs_bed_temp',        int,      90,  (  0, 150),  "The bed temperature to use for ABS filament. (C)"),
+        ('abs_hotend_temp',     int,     230,  (150, 300),  "The extruder temperature to use for ABS filament. (C)"),
+        ('abs_max_speed',       float,  75.0,  (  0, 150),  "The maximum speed when extruding ABS filament. (mm/s)"),
+        ('hips_bed_temp',       int,     100,  (  0, 150),  "The bed temperature to use for dissolvable HIPS filament. (C)"),
+        ('hips_hotend_temp',    int,     230,  (150, 300),  "The extruder temperature to use for dissolvable HIPS filament. (C)"),
+        ('hips_max_speed',      float,  30.0,  (  0, 150),  "The maximum speed when extruding dissolvable HIPS filament. (mm/s)"),
+        ('nylon_bed_temp',      int,      70,  (  0, 150),  "The bed temperature to use for Nylon filament. (C)"),
+        ('nylon_hotend_temp',   int,     255,  (150, 300),  "The extruder temperature to use for Nylon filament. (C)"),
+        ('nylon_max_speed',     float,  75.0,  (  0, 150),  "The maximum speed when extruding Nylon filament. (mm/s)"),
+        ('pc_bed_temp',         int,     130,  (  0, 150),  "The bed temperature to use for Polycarbonate filament. (C)"),
+        ('pc_hotend_temp',      int,     290,  (150, 300),  "The extruder temperature to use for Polycarbonate filament. (C)"),
+        ('pc_max_speed',        float,  75.0,  (  0, 150),  "The maximum speed when extruding Polycarbonate filament. (mm/s)"),
+        ('pet_bed_temp',        int,      70,  (  0, 150),  "The bed temperature to use for PETG/PETT filament. (C)"),
+        ('pet_hotend_temp',     int,     230,  (150, 300),  "The extruder temperature to use for PETG/PETT filament. (C)"),
+        ('pet_max_speed',       float,  75.0,  (  0, 150),  "The maximum speed when extruding PETG/PETT filament. (mm/s)"),
+        ('pla_bed_temp',        int,      45,  (  0, 150),  "The bed temperature to use for PLA filament. (C)"),
+        ('pla_hotend_temp',     int,     205,  (150, 300),  "The extruder temperature to use for PLA filament. (C)"),
+        ('pla_max_speed',       float,  75.0,  (  0, 150),  "The maximum speed when extruding PLA filament. (mm/s)"),
+        ('pp_bed_temp',         int,     110,  (  0, 150),  "The bed temperature to use for Polypropylene filament. (C)"),
+        ('pp_hotend_temp',      int,     250,  (150, 300),  "The extruder temperature to use for Polypropylene filament. (C)"),
+        ('pp_max_speed',        float,  75.0,  (  0, 150),  "The maximum speed when extruding Polypropylene filament. (mm/s)"),
+        ('pva_bed_temp',        int,      60,  (  0, 150),  "The bed temperature to use for dissolvable PVA filament. (C)"),
+        ('pva_hotend_temp',     int,     220,  (150, 300),  "The extruder temperature to use for dissolvable PVA filament. (C)"),
+        ('pva_max_speed',       float,  30.0,  (  0, 150),  "The maximum speed when extruding dissolvable PVA filament. (mm/s)"),
+        ('softpla_bed_temp',    int,      30,  (  0, 150),  "The bed temperature to use for flexible SoftPLA filament. (C)"),
+        ('softpla_hotend_temp', int,     230,  (150, 300),  "The extruder temperature to use for flexible SoftPLA filament. (C)"),
+        ('softpla_max_speed',   float,  30.0,  (  0, 150),  "The maximum speed when extruding flexible SoftPLA filament. (mm/s)"),
+        ('tpe_bed_temp',        int,      30,  (  0, 150),  "The bed temperature to use for flexible TPE filament. (C)"),
+        ('tpe_hotend_temp',     int,     220,  (150, 300),  "The extruder temperature to use for flexible TPE filament. (C)"),
+        ('tpe_max_speed',       float,  30.0,  (  0, 150),  "The maximum speed when extruding flexible TPE filament. (mm/s)"),
+        ('tpu_bed_temp',        int,      50,  (  0, 150),  "The bed temperature to use for flexible TPU filament. (C)"),
+        ('tpu_hotend_temp',     int,     250,  (150, 300),  "The extruder temperature to use for flexible TPU filament. (C)"),
+        ('tpu_max_speed',       float,  30.0,  (  0, 150),  "The maximum speed when extruding flexible TPU filament. (mm/s)"),
+    )),
     ('Machine', (
         ('bed_geometry',      list, 'Rectangular', ('Rectangular', 'Cylindrical'), "The shape of the build volume cross-section."),
-        ('bed_size_x',        float,  200, (0,1000),   "The X-axis size of the build platform bed."),
-        ('bed_size_y',        float,  200, (0,1000),   "The Y-axis size of the build platform bed."),
-        ('bed_center_x',      float,  100, (-500,500), "The X coordinate of the center of the bed."),
-        ('bed_center_y',      float,  100, (-500,500), "The Y coordinate of the center of the bed."),
-        ('bed_temp',          int,     70, (0, 150),   "The temperature to set the heated bed to."),
+        ('bed_size_x',        float,  200, (0,1000),    "The X-axis size of the build platform bed."),
+        ('bed_size_y',        float,  200, (0,1000),    "The Y-axis size of the build platform bed."),
+        ('bed_center_x',      float,  100, (-500,500),  "The X coordinate of the center of the bed."),
+        ('bed_center_y',      float,  100, (-500,500),  "The Y coordinate of the center of the bed."),
+        ('bed_temp',          int,     70, (0, 150),    "The temperature to set the heated bed to."),
 
-        ('extruder_count',    int,      1, (1, 4),     "The number of extruders this machine has."),
-        ('default_nozzle',    int,      0, (0, 7),     "The default extruder used for printing."),
-        ('infill_nozzle',     int,     -1, (-1, 7),    "The extruder used for infill material.  -1 means use default nozzle."),
-        ('support_nozzle',    int,     -1, (-1, 7),    "The extruder used for support material.  -1 means use default nozzle."),
+        ('extruder_count',    int,      1, (1, 4),      "The number of extruders this machine has."),
+        ('default_nozzle',    int,      0, (0, 4),      "The default extruder used for printing."),
+        ('infill_nozzle',     int,     -1, (-1, 4),     "The extruder used for infill material.  -1 means use default nozzle."),
+        ('support_nozzle',    int,     -1, (-1, 4),     "The extruder used for support material.  -1 means use default nozzle."),
 
-        ('nozzle_0_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 0. (C)"),
-        ('nozzle_0_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 0. (mm)"),
-        ('nozzle_0_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 0. (mm)"),
-        ('nozzle_0_xoff',     float,  0.0, (-100, 100), "The X positional offset for extruder 0. (mm)"),
-        ('nozzle_0_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 0. (mm)"),
-        ('nozzle_0_max_rate', float, 50.0, (0., 100.), "The maximum volumetric extrusion rate for extruder 0. (mm^3/s)"),
+        ('nozzle_0_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
+        ('nozzle_0_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 0. (mm)"),
+        ('nozzle_0_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 0. (mm)"),
+        ('nozzle_0_xoff',      float,  0.0, (-100, 100), "The X positional offset for extruder 0. (mm)"),
+        ('nozzle_0_yoff',      float,  0.0, (-100, 100), "The Y positional offset for extruder 0. (mm)"),
+        ('nozzle_0_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 0. (mm/s)"),
 
-        ('nozzle_1_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 1. (C)"),
-        ('nozzle_1_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 1. (mm)"),
-        ('nozzle_1_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 1. (mm)"),
-        ('nozzle_1_xoff',     float, 25.0, (-100, 100), "The X positional offset for extruder 1. (mm)"),
-        ('nozzle_1_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 1. (mm)"),
-        ('nozzle_1_max_rate', float, 50.0, (0., 100.), "The maximum volumetric extrusion rate for extruder 1. (mm^3/s)"),
+        ('nozzle_1_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 1. (C)"),
+        ('nozzle_1_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 1. (mm)"),
+        ('nozzle_1_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 1. (mm)"),
+        ('nozzle_1_xoff',      float, 25.0, (-100, 100), "The X positional offset for extruder 1. (mm)"),
+        ('nozzle_1_yoff',      float,  0.0, (-100, 100), "The Y positional offset for extruder 1. (mm)"),
+        ('nozzle_1_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 1. (mm/s)"),
 
-        ('nozzle_2_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 2. (C)"),
-        ('nozzle_2_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 2. (mm)"),
-        ('nozzle_2_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 2. (mm)"),
-        ('nozzle_2_xoff',     float, -25., (-100, 100), "The X positional offset for extruder 2. (mm)"),
-        ('nozzle_2_yoff',     float,  0.0, (-100, 100), "The Y positional offset for extruder 2. (mm)"),
-        ('nozzle_2_max_rate', float, 50.0, (0., 100.), "The maximum volumetric extrusion rate for extruder 2. (mm^3/s)"),
+        ('nozzle_2_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 2. (C)"),
+        ('nozzle_2_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 2. (mm)"),
+        ('nozzle_2_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 2. (mm)"),
+        ('nozzle_2_xoff',      float, -25., (-100, 100), "The X positional offset for extruder 2. (mm)"),
+        ('nozzle_2_yoff',      float,  0.0, (-100, 100), "The Y positional offset for extruder 2. (mm)"),
+        ('nozzle_2_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 2. (mm/s)"),
 
-        ('nozzle_3_temp',     int,    190, (150, 250), "The temperature of the nozzle for extruder 3. (C)"),
-        ('nozzle_3_filament', float, 1.75, (1.0, 3.5), "The diameter of the filament for extruder 3. (mm)"),
-        ('nozzle_3_diam',     float,  0.4, (0.1, 1.5), "The diameter of the nozzle for extruder 3. (mm)"),
-        ('nozzle_3_xoff',     float,  0.0, (-100, 100), "The X positional offset for extruder 3. (mm)"),
-        ('nozzle_3_yoff',     float, 25.0, (-100, 100), "The Y positional offset for extruder 3. (mm)"),
-        ('nozzle_3_max_rate', float, 50.0, (0., 100.), "The maximum volumetric extrusion rate for extruder 3. (mm^3/s)"),
+        ('nozzle_3_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 3. (C)"),
+        ('nozzle_3_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 3. (mm)"),
+        ('nozzle_3_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 3. (mm)"),
+        ('nozzle_3_xoff',      float,  0.0, (-100, 100), "The X positional offset for extruder 3. (mm)"),
+        ('nozzle_3_yoff',      float, 25.0, (-100, 100), "The Y positional offset for extruder 3. (mm)"),
+        ('nozzle_3_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 3. (mm/s)"),
     )),
 ])
 
@@ -117,11 +143,13 @@ class Slicer(object):
                     "range": rng,
                     "descr": desc
                 }
-        self.mag = 4
-        self.layer = 0
+        self.raw_layer_paths = {}
         self.last_pos = (0.0, 0.0, 0.0)
         self.last_e = 0.0
         self.last_nozl = 0
+        self.total_build_time = 0.0
+        self.mag = 4
+        self.layer = 0
         self.config(**kwargs)
 
     def config(self, **kwargs):
@@ -249,6 +277,7 @@ class Slicer(object):
         supp_nozl_d = self.conf['nozzle_{0}_diam'.format(self.supp_nozl)]
 
         self.layer_h = self.conf['layer_height']
+        self.raft_layers = self.conf['raft_layers'] if self.conf['adhesion_type'] == "Raft" else 0
         self.extrusion_ratio = 1.25
         self.extrusion_width = dflt_nozl_d * self.extrusion_ratio
         self.infill_width = infl_nozl_d * self.extrusion_ratio
@@ -260,7 +289,7 @@ class Slicer(object):
         self.layers = int(height / self.layer_h)
         self.layer_zs = [
             self.layer_h * (layer + 1)
-            for layer in range(self.layers)
+            for layer in range(self.layers + self.raft_layers)
         ]
         self.thermo = TextThermometer(self.layers)
 
@@ -276,26 +305,35 @@ class Slicer(object):
         print("Infill")
         self._slicer_task_fill()
 
-        print("Gcode Generation")
+        print("Pathing")
+        self._slicer_task_pathing()
+
+        print("Writing GCode to {}".format(filename))
         self._slicer_task_gcode(filename)
 
-        print("Slicing complete")
+        print(
+            "Slicing complete.  Estimated build time: {:d}h {:02d}m".format(
+                int(self.total_build_time/3600),
+                int((self.total_build_time%3600)/60)
+            )
+        )
 
         if showgui:
             print("Launching slice viewer")
             self._display_paths()
 
-        # TODO: Route paths
-        # TODO: No retraction and hop for short paths
-        # TODO: No Z move when Z hasn't changed.
-        # TODO: Reset E axis less frequently.
-        # TODO: Heated Bed temperature setup and warmup wait
-        # TODO: Extruder temperature setup and warmup wait
-        # TODO: G-Code state initialization and shutdown
-        # TODO: Relative E motions.
+        # TODO: Enable multi-model loading/placement/rotation
+        # TODO: Verify models fit inside build volume.
         # TODO: Interior solid infill perimeter paths
-        # TODO: Shorten support structures Z height
-        # TODO: Bridging
+        # TODO: Pathing type prioritization
+        # TODO: Optimize route paths
+        # TODO: Skip retraction for short motions
+        # TODO: Smooth top surfacing for non-flat surfaces
+        # TODO: G-Code custom startup/shutdown/toolchange scripts.
+        # TODO: G-Code flavors
+        # TODO: G-Code volumetric extrusion
+        # TODO: Relative E motions.
+        # TODO: Better Bridging
 
     ############################################################
 
@@ -372,7 +410,6 @@ class Slicer(object):
                     if not footprint:
                         break
                 drop_paths[layer].append(footprint)
-                # drop_paths[layer] = geom.union(drop_paths[layer], [footprint])
 
         cumm_mask = []
         for layer in range(self.layers):
@@ -416,49 +453,50 @@ class Slicer(object):
         self.thermo.clear()
 
     def _slicer_task_adhesion(self):
+        adhesion = self.conf['adhesion_type']
+        skirt_w  = self.conf['skirt_outset']
+        minloops = self.conf['skirt_loops']
+        minlen   = self.conf['skirt_min_len']
+        brim_w   = self.conf['brim_width']
+        raft_w   = self.conf['raft_outset']
+
+        # Skirt
+        skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
+        skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
+        self.skirt_paths = geom.close_paths(skirt)
+
+        # Brim
+        brim = []
+        if adhesion == "Brim":
+            rings = int(math.ceil(brim_w/self.extrusion_width))
+            for i in range(rings):
+                for path in geom.offset(self.layer_paths[0], (i+0.5)*self.extrusion_width):
+                    brim.append(path)
+        self.brim_paths = geom.close_paths(brim)
+
         # Raft
         raft_outline = []
         raft_infill = []
-        if self.conf['adhesion_type'] == "Raft":
-            rings = int(math.ceil(self.conf['brim_width']/self.extrusion_width))
-            outset = max(self.conf['skirt_outset']+self.extrusion_width*self.conf['skirt_loops'], self.conf['raft_outset']+self.extrusion_width)
+        if adhesion == "Raft":
+            rings = int(math.ceil(brin_w/self.extrusion_width))
+            outset = raft_w + max(
+                skirt_w + self.extrusion_width*minloops,
+                self.conf['raft_outset'] + self.extrusion_width
+            )
             paths = geom.union(self.layer_paths[0], self.support_outline[0])
             raft_outline = geom.offset(paths, outset)
             bounds = geom.paths_bounds(raft_outline)
             mask = geom.offset(raft_outline, self.conf['infill_overlap']-self.extrusion_width)
             lines = geom.make_infill_lines(bounds, 0, 0.75, self.extrusion_width)
             raft_infill.append(geom.clip(lines, mask, subj_closed=False))
-            raft_layers = self.conf['raft_layers']
-            for layer in range(raft_layers-1):
+            for layer in range(self.raft_layers-1):
                 base_ang = 90 * ((layer+1) % 2)
                 lines = geom.make_infill_lines(bounds, base_ang, 1.0, self.extrusion_width)
                 raft_infill.append(geom.clip(lines, raft_outline, subj_closed=False))
-                self.layer_zs.append(self.layer_zs[-1]+self.layer_h)
         self.raft_outline = geom.close_paths(raft_outline)
         self.raft_infill = raft_infill
 
-        # Brim
-        brim = []
-        adhesion = self.conf['adhesion_type']
-        brim_w = self.conf['brim_width']
-        if adhesion == "Brim":
-            rings = int(math.ceil(brim_w/self.extrusion_width))
-            for i in range(rings):
-                for path in geom.offset(self.layer_paths[0], (i+0.5)*self.extrusion_width):
-                    if path[-1] != path[0]:
-                        path.append(path[0])
-                    brim.append(path)
-        self.brim_paths = geom.close_paths(brim)
-
-        # Skirt
-        skirt = []
-        priming = []
-        skirt_w = self.conf['skirt_outset']
-        minloops = self.conf['skirt_loops']
-        minlen = self.conf['skirt_min_len']
-        skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
-        skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
-        self.skirt_paths = geom.close_paths(skirt)
+        # Priming loops
         plen = max(
             1.0,
             sum(
@@ -469,6 +507,7 @@ class Slicer(object):
         loops = minloops
         if adhesion != "Raft":
             loops = max(loops, int(math.ceil(minlen/plen)))
+        priming = []
         for i in range(loops-1):
             for path in geom.offset(skirt, (i+1)*self.extrusion_width):
                 priming.append(path)
@@ -535,10 +574,48 @@ class Slicer(object):
             self.sparse_infill.append(sparse_infill)
         self.thermo.clear()
 
+    def _slicer_task_pathing(self):
+        if self.priming_paths:
+            paths = geom.close_paths(self.priming_paths)
+            self._add_raw_layer_paths(0, paths, self.support_width, self.dflt_nozl)
+
+        if self.brim_paths:
+            paths = geom.close_paths(self.brim_paths)
+            self._add_raw_layer_paths(0, paths, self.support_width, self.supp_nozl)
+        if self.raft_outline:
+            outline = geom.close_paths(self.raft_outline)
+            self._add_raw_layer_paths(0, outline, self.support_width, self.supp_nozl)
+        if self.raft_infill:
+            for layer in range(self.raft_layers):
+                paths = self.raft_infill[layer]
+                self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl)
+
+        for slicenum in range(len(self.perimeter_paths)):
+            self.thermo.update(slicenum)
+            layer = self.raft_layers + slicenum
+
+            if self.skirt_paths:
+                paths = geom.close_paths(self.skirt_paths)
+                if layer < self.conf['skirt_layers'] + self.raft_layers:
+                    self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl)
+
+            if slicenum < len(self.support_outline):
+                outline = geom.close_paths(self.support_outline[slicenum])
+                self._add_raw_layer_paths(layer, outline, self.support_width, self.supp_nozl)
+                self._add_raw_layer_paths(layer, self.support_infill[slicenum], self.support_width, self.supp_nozl)
+
+            for paths in reversed(self.perimeter_paths[slicenum]):
+                paths = geom.close_paths(paths)
+                self._add_raw_layer_paths(layer, paths, self.extrusion_width, self.dflt_nozl)
+            self._add_raw_layer_paths(layer, self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl)
+
+            self._add_raw_layer_paths(layer, self.sparse_infill[slicenum], self.infill_width, self.infl_nozl)
+        self.thermo.clear()
+
     def _slicer_task_gcode(self, filename):
         self.thermo.set_target(self.layers)
 
-        raft_layers = len(self.raft_infill)
+        total_layers = self.layers + self.raft_layers
         with open(filename, "w") as f:
             f.write(";FLAVOR:Marlin\n")
             f.write(";Layer height: {:.2f}\n".format(self.conf['layer_height']))
@@ -556,76 +633,26 @@ class Slicer(object):
             f.write("G1 Z15 F6000 ;raise extruder\n")
             f.write("G92 E0 ;Zero extruder\n")
             f.write("M117 Printing...\n")
-            f.write(";LAYER_COUNT:{}\n".format(self.layers+raft_layers))
-            f.write(";LAYER:{}\n".format(0))
+            f.write(";LAYER_COUNT:{}\n".format(total_layers))
 
-            if self.priming_paths:
-                f.write("( priming )\n")
-                paths = geom.close_paths(self.priming_paths)
-                for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[0]):
-                    f.write(line)
-
-            if self.skirt_paths:
-                f.write("( skirt )\n")
-                paths = geom.close_paths(self.skirt_paths)
-                for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[0]):
-                    f.write(line)
-
-            if self.brim_paths and slicenum == 0:
-                f.write("( brim )\n")
-                paths = geom.close_paths(self.brim_paths)
-                for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[0]):
-                    f.write(line)
-
-            for layer in range(raft_layers):
-                if layer > 0:
-                    f.write(";LAYER:{}\n".format(layer))
-
-                if self.raft_outlines and layer == 0:
-                    outline = geom.close_paths(self.raft_outline)
-                    for line in self._paths_gcode(outline, self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                        f.write(line)
-
-                if self.raft_infill:
-                    paths = self.layer_infill[layer]
-                    for line in self._paths_gcode(paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                        f.write(line)
-
-            for slicenum in range(len(self.perimeter_paths)):
-                self.thermo.update(slicenum)
-                layer = raft_layers + slicenum
-
-                if layer > 0:
-                    f.write(";LAYER:{}\n".format(layer))
-
-                if self.skirt_paths and layer > 0 and slicenum < self.conf['skirt_layers']:
-                    f.write("( skirt )\n")
-                    for line in self._paths_gcode(self.skirt_paths, self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                        f.write(line)
-
-                outline = geom.close_paths(self.support_outline[slicenum])
-                f.write("( support outline )\n")
-                for line in self._paths_gcode(outline, self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-                f.write("( support infill )\n")
-                for line in self._paths_gcode(self.support_infill[slicenum], self.support_width, self.supp_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-                f.write("( perimeters )\n")
-                for paths in reversed(self.perimeter_paths[slicenum]):
-                    paths = geom.close_paths(paths)
-                    for line in self._paths_gcode(paths, self.extrusion_width, self.dflt_nozl, self.layer_zs[layer]):
-                        f.write(line)
-                f.write("( solid fill )\n")
-                for line in self._paths_gcode(self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl, self.layer_zs[layer]):
-                    f.write(line)
-
-                f.write("( sparse infill )\n")
-                for line in self._paths_gcode(self.sparse_infill[slicenum], self.infill_width, self.infl_nozl, self.layer_zs[layer]):
-                    f.write(line)
+            self.thermo.set_target(total_layers)
+            for layer in range(total_layers):
+                self.thermo.update(layer)
+                f.write(";LAYER:{}\n".format(layer))
+                for nozl in range(4):
+                    if layer in self.raw_layer_paths and self.raw_layer_paths[layer][nozl] != []:
+                        f.write("( Nozzle {} )\n".format(nozl))
+                        for paths, width in self.raw_layer_paths[layer][nozl]:
+                            for line in self._paths_gcode(paths, width, nozl, self.layer_zs[layer]):
+                                f.write(line)
             self.thermo.clear()
 
     ############################################################
+
+    def _add_raw_layer_paths(self, layer, paths, width, nozl):
+        if layer not in self.raw_layer_paths:
+            self.raw_layer_paths[layer] = [[] for i in range(4)]
+        self.raw_layer_paths[layer][nozl].append( (paths, width) )
 
     def _tool_change_gcode(self, newnozl):
         retract_ext_dist = self.conf['retract_extruder']
@@ -641,7 +668,7 @@ class Slicer(object):
     def _paths_gcode(self, paths, ewidth, nozl, z):
         fil_diam = self.conf['nozzle_{0:d}_filament'.format(nozl)]
         nozl_diam = self.conf['nozzle_{0:d}_filament'.format(nozl)]
-        max_rate = self.conf['nozzle_{0:d}_max_rate'.format(nozl)]
+        max_speed = self.conf['nozzle_{0:d}_max_speed'.format(nozl)]
         layer_height = self.conf['layer_height']
         retract_dist = self.conf['retract_dist']
         retract_speed = self.conf['retract_speed']
@@ -658,27 +685,29 @@ class Slicer(object):
         for path in paths:
             ox, oy = path[0][0:2]
             if retract_lift > 0 or self.last_pos[2] != z:
+                self.total_build_time += abs(retract_lift) / travel_rate_z
                 gcode_lines.append("G1 Z{z:.2f} F{f:g}\n".format(z=z+retract_lift, f=travel_rate_z*60.0))
+            dist = math.hypot(self.last_pos[1]-oy, self.last_pos[0]-ox)
+            self.total_build_time += dist / travel_rate_xy
             gcode_lines.append("G0 X{x:.2f} Y{y:.2f} F{f:g}\n".format(x=ox, y=oy, f=travel_rate_xy*60.0))
             if retract_lift > 0:
+                self.total_build_time += abs(retract_lift) / travel_rate_z
                 gcode_lines.append("G1 Z{z:.2f} F{f:g}\n".format(z=z, f=travel_rate_z*60.0))
             if retract_dist > 0:
+                self.total_build_time += abs(retract_dist) / retract_speed
                 gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=self.last_e+retract_dist, f=retract_speed*60.0))
                 self.last_e += retract_dist
             for x, y in path[1:]:
                 dist = math.hypot(y-oy, x-ox)
                 fil_dist = dist * xsect / fil_xsect
-                secs = dist / feed_rate
-                if secs > 0:
-                    vol_rate = fil_dist * fil_xsect / secs
-                    ratio = min(vol_rate, max_rate) / vol_rate
-                else:
-                    ratio = 1.0
+                speed = min(feed_rate, max_speed) * 60.0
+                self.total_build_time += dist / feed_rate
                 self.last_e += fil_dist
-                gcode_lines.append("G1 X{x:.2f} Y{y:.2f} E{e:.3f} F{f:g}\n".format(x=x, y=y, e=self.last_e, f=ratio*feed_rate*60.0))
+                gcode_lines.append("G1 X{x:.2f} Y{y:.2f} E{e:.3f} F{f:g}\n".format(x=x, y=y, e=self.last_e, f=speed))
                 self.last_pos = (x, y, z)
                 ox, oy = x, y
             if retract_dist > 0:
+                self.total_build_time += abs(retract_dist) / retract_speed
                 gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=self.last_e-retract_dist, f=retract_speed*60.0))
                 self.last_e -= retract_dist
         return gcode_lines
@@ -719,12 +748,19 @@ class Slicer(object):
         self._redraw_paths()
 
     def _redraw_paths(self, incdec=0):
-        raft_layers = len(self.raft_infill)
-        self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1+raft_layers)
+        self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1+self.raft_layers)
         layernum = self.layer
-        layers = raft_layers + self.layers
+        layers = self.raft_layers + self.layers
         self.canvas.delete("all")
-        self.canvas.create_text((30, 550), anchor="nw", text="Layer {layer}/{layers}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(layer=layernum, layers=layers-1, z=self.layer_zs[layernum], zoom=self.mag*100/5.0))
+        self.canvas.create_text(
+            (30, 550), anchor="nw",
+            text="Layer {layer}/{layers}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(
+                layer=layernum,
+                layers=layers-1,
+                z=self.layer_zs[layernum],
+                zoom=self.mag*100/5.0
+            )
+        )
         barpos = (150,570)
         barsize = (500,10)
         pcnt = layernum / (layers-1.0)
@@ -732,30 +768,16 @@ class Slicer(object):
         if pcnt * barsize[0] > 1.0:
             self.canvas.create_rectangle(barpos[0],barpos[1],barpos[0]+int(barsize[0]*pcnt),barpos[1]+barsize[1],outline="blue",fill="blue")
 
-        colors = ["#700", "#c00", "#f00", "#f77"]
-        if layernum < raft_layers:
-            if layernum == 0:
-                self._draw_line(self.raft_outline, colors=colors, ewidth=self.support_width)
-            self._draw_line(self.raft_infill[layernum], colors=colors, ewidth=self.support_width)
-            return
-        else:
-            if layernum == 0:
-                self._draw_line(self.priming_paths, colors=colors, ewidth=self.support_width)
-                self._draw_line(self.brim_paths, colors=colors, ewidth=self.support_width)
-            layernum -= raft_layers
-
-        if self.skirt_paths and layernum < self.conf['skirt_layers']:
-            self._draw_line(self.skirt_paths, colors=colors, ewidth=self.support_width)
-        self._draw_line(self.support_outline[layernum], colors=colors, ewidth=self.support_width)
-        self._draw_line(self.support_infill[layernum], colors=colors, ewidth=self.support_width)
-
-        colors = ["#070", "#0c0", "#0f0", "#7f7"]
-        for pathnum, path in enumerate(self.perimeter_paths[layernum]):
-            self._draw_line(path, offset=pathnum, colors=colors, ewidth=self.extrusion_width)
-
-        colors = ["#770", "#aa0", "#dd0", "#ff0"]
-        self._draw_line(self.solid_infill[layernum], colors=colors, ewidth=self.infill_width)
-        self._draw_line(self.sparse_infill[layernum], colors=colors, ewidth=self.infill_width)
+        nozl_colors = [
+            ["#070", "#0c0", "#0f0", "#7f7"],
+            ["#770", "#aa0", "#dd0", "#ff0"],
+            ["#007", "#00c", "#00f", "#77f"],
+            ["#700", "#c00", "#f00", "#f77"],
+        ]
+        for nozl in range(4):
+            if layernum in self.raw_layer_paths and self.raw_layer_paths[layernum][nozl]:
+                for paths, width in self.raw_layer_paths[layernum][nozl]:
+                    self._draw_line(paths, colors=nozl_colors[nozl], ewidth=width)
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
         wincx = self.master.winfo_width() / 2
