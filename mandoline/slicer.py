@@ -35,10 +35,9 @@ slicer_configs = OrderedDict([
         ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
         ('raft_layers',       int,      3, (1, 5),      "Number of layers to use in making the raft."),
         ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
-        ('skirt_loops',       int,      0, (0, 100),    "Print at least this many skirt loops to prime the extruder."),
-        ('skirt_min_len',     float, 10.0, (0., 1000.), "Add extra loops on the first layer until we've extruded at least this amount."),
         ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
         ('skirt_layers',      int,      1, (1, 1000),   "Number of layers to print print the skirt on."),
+        ('prime_length',      float, 10.0, (0., 1000.), "Length of filament to extrude when priming hotends."),
     )),
     ('Retraction', (
         ('retract_enable',    bool,   True, None,       "Enable filament retraction."),
@@ -455,13 +454,14 @@ class Slicer(object):
     def _slicer_task_adhesion(self):
         adhesion = self.conf['adhesion_type']
         skirt_w  = self.conf['skirt_outset']
-        minloops = self.conf['skirt_loops']
-        minlen   = self.conf['skirt_min_len']
         brim_w   = self.conf['brim_width']
         raft_w   = self.conf['raft_outset']
 
         # Skirt
-        skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
+        if self.support_outline:
+            skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
+        else:
+            skirt_mask = geom.offset(self.skirt_bounds, skirt_w)
         skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
         self.skirt_paths = geom.close_paths(skirt)
 
@@ -480,7 +480,7 @@ class Slicer(object):
         if adhesion == "Raft":
             rings = int(math.ceil(brin_w/self.extrusion_width))
             outset = raft_w + max(
-                skirt_w + self.extrusion_width*minloops,
+                skirt_w + self.extrusion_width,
                 self.conf['raft_outset'] + self.extrusion_width
             )
             paths = geom.union(self.layer_paths[0], self.support_outline[0])
@@ -495,23 +495,6 @@ class Slicer(object):
                 raft_infill.append(geom.clip(lines, raft_outline, subj_closed=False))
         self.raft_outline = geom.close_paths(raft_outline)
         self.raft_infill = raft_infill
-
-        # Priming loops
-        plen = max(
-            1.0,
-            sum(
-                sum([math.hypot(p2[0]-p1[0], p2[1]-p1[1]) for p1, p2 in zip(path, path[1:]+path[0:1])])
-                for path in skirt
-            )
-        )
-        loops = minloops
-        if adhesion != "Raft":
-            loops = max(loops, int(math.ceil(minlen/plen)))
-        priming = []
-        for i in range(loops-1):
-            for path in geom.offset(skirt, (i+1)*self.extrusion_width):
-                priming.append(path)
-        self.priming_paths = geom.close_paths(priming)
         self.thermo.clear()
 
     def _slicer_task_fill(self):
@@ -575,9 +558,54 @@ class Slicer(object):
         self.thermo.clear()
 
     def _slicer_task_pathing(self):
-        if self.priming_paths:
-            paths = geom.close_paths(self.priming_paths)
-            self._add_raw_layer_paths(0, paths, self.support_width, self.dflt_nozl)
+        prime_nozls = [self.conf['default_nozzle']];
+        if self.conf['infill_nozzle'] != -1:
+            prime_nozls.append(self.conf['infill_nozzle']);
+        if self.conf['support_nozzle'] != -1:
+            prime_nozls.append(self.conf['support_nozzle']);
+        center_x = self.conf['bed_center_x']
+        center_y = self.conf['bed_center_y']
+        size_x = self.conf['bed_size_x']
+        size_y = self.conf['bed_size_y']
+        minx = center_x - size_x/2
+        maxx = center_x + size_x/2
+        miny = center_y - size_y/2
+        maxy = center_y + size_y/2
+        bed_geom = self.conf['bed_geometry']
+        rect_bed = bed_geom == 'Rectangular'
+        cyl_bed = bed_geom == 'Cylindrical'
+        maxlen = (maxy-miny-20) if rect_bed else (2*math.pi*math.sqrt((size_x*size_x)/2)-20)
+        reps = self.conf['prime_length'] / maxlen
+        ireps = int(math.ceil(reps))
+        for noznum, nozl in enumerate(prime_nozls):
+            ewidth = self.extrusion_width * 1.25
+            nozl_path = []
+            for rep in range(ireps):
+                if rect_bed:
+                    x = minx + 5 + (noznum*reps+rep+1) * ewidth
+                    if rep%2 == 0:
+                        y1 = miny+10
+                        y2 = maxy-10
+                    else:
+                        y1 = maxy-10
+                        y2 = miny+10
+                    nozl_path.append([x, y1])
+                    if rep == ireps-1:
+                        part = reps-math.floor(reps)
+                        nozl_path.append([x, y1 + (y2-y1)*part])
+                    else:
+                        nozl_path.append([x, y2])
+                elif cyl_bed:
+                    r = maxx - 5 - (noznum*reps+rep+1) * ewidth
+                    if rep == ireps-1:
+                        part = float(reps) - math.floor(reps)
+                    else:
+                        part = 1.0
+                    steps = math.floor(2.0 * math.pi * r * part / 4.0)
+                    stepang = 2 * math.pi / steps
+                    for i in range(int(steps)):
+                        nozl_path.append( [r*math.cos(i*stepang), r*math.sin(i*stepang)] )
+            self._add_raw_layer_paths(0, [nozl_path], ewidth, noznum)
 
         if self.brim_paths:
             paths = geom.close_paths(self.brim_paths)
@@ -649,10 +677,48 @@ class Slicer(object):
 
     ############################################################
 
-    def _add_raw_layer_paths(self, layer, paths, width, nozl):
+    def _vdist(self,a,b):
+        delta = [x-y for x,y in zip(a,b)]
+        dist = math.sqrt(sum([float(x)*float(x) for x in delta]))
+        return dist
+
+    def _add_raw_layer_paths(self, layer, paths, width, nozl, do_not_cross=[]):
+        maxdist = 2.0
+        joined = []
+        if paths:
+            path = paths.pop(0)
+            while paths:
+                mindist = 1e9
+                minidx = None
+                enda = False
+                endb = False
+                dists = [
+                    [i, self._vdist(path[a], paths[i][b]), a==-1, b==-1]
+                    for a in [0,-1]
+                    for b in [0,-1]
+                    for i in range(len(paths))
+                ]
+                for i, dist, ea, eb in dists:
+                    if dist < mindist:
+                        minidx, mindist, enda, endb = (i, dist, ea, eb)
+                if mindist <= maxdist:
+                    path2 = paths.pop(minidx)
+                    if enda:
+                        path = path + (list(reversed(path2)) if endb else path2)
+                    else:
+                        path = (path2 if endb else list(reversed(path2))) + path
+                else:
+                    if minidx is not None:
+                        if enda == endb:
+                            paths.insert(0, list(reversed(paths.pop(minidx))))
+                        else:
+                            paths.insert(0, paths.pop(minidx))
+                    joined.append(path)
+                    path = paths.pop(0)
+            joined.append(path)
         if layer not in self.raw_layer_paths:
             self.raw_layer_paths[layer] = [[] for i in range(4)]
-        self.raw_layer_paths[layer][nozl].append( (paths, width) )
+        self.raw_layer_paths[layer][nozl].append( (joined, width) )
 
     def _tool_change_gcode(self, newnozl):
         retract_ext_dist = self.conf['retract_extruder']
@@ -768,12 +834,13 @@ class Slicer(object):
         if pcnt * barsize[0] > 1.0:
             self.canvas.create_rectangle(barpos[0],barpos[1],barpos[0]+int(barsize[0]*pcnt),barpos[1]+barsize[1],outline="blue",fill="blue")
 
-        nozl_colors = [
-            ["#070", "#0c0", "#0f0", "#7f7"],
-            ["#770", "#aa0", "#dd0", "#ff0"],
-            ["#007", "#00c", "#00f", "#77f"],
-            ["#700", "#c00", "#f00", "#f77"],
-        ]
+        # nozl_colors = [
+        #     ["#070", "#0c0", "#0f0", "#7f7"],
+        #     ["#770", "#aa0", "#dd0", "#ff0"],
+        #     ["#007", "#00c", "#00f", "#77f"],
+        #     ["#700", "#c00", "#f00", "#f77"],
+        # ]
+        nozl_colors = [ ["#0c0"], ["#aa0"], ["#00c"], ["#c00"] ]
         for nozl in range(4):
             if layernum in self.raw_layer_paths and self.raw_layer_paths[layernum][nozl]:
                 for paths, width in self.raw_layer_paths[layernum][nozl]:
@@ -794,6 +861,8 @@ class Slicer(object):
             path = [(wincx+(x-cx)*self.mag, wincy+(cy-y)*self.mag) for x, y in path]
             color = colors[(pathnum + offset) % len(colors)]
             self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle="round", joinstyle="round")
+            self.canvas.create_line([path[0],path[0]], fill="blue", width=self.mag*ewidth, capstyle="round", joinstyle="round")
+            self.canvas.create_line([path[-1],path[-1]], fill="red", width=self.mag*ewidth, capstyle="round", joinstyle="round")
 
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap
