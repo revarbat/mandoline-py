@@ -308,7 +308,9 @@ class StlData(object):
             if key1 not in paths:
                 paths[key1] = []
             paths[key1].append(path)
-        return outpaths
+        if deadpaths:
+            print("\nIncomplete Polygon at z=%s" % z)
+        return (outpaths, deadpaths)
 
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap

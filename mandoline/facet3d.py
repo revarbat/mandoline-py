@@ -141,8 +141,8 @@ class Facet3D(object):
 
     def overhang_angle(self):
         vert = Vector([0.0, 0.0, -1.0])
-        ang = vert.angle(self.norm)
-        return 90.0 - (ang * 180.0 / math.pi)
+        ang = vert.angle(self.norm) * 180.0 / math.pi
+        return (90.0 - ang)
 
     def intersects_z(self, z):
         minz = min([v[2] for v in self.vertices])

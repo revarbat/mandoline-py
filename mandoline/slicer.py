@@ -3,6 +3,7 @@ from __future__ import print_function
 import sys
 import math
 import time
+import random
 import os.path
 from collections import OrderedDict
 from appdirs import user_config_dir
@@ -15,6 +16,7 @@ slicer_configs = OrderedDict([
     ('Quality', (
         ('layer_height',      float,  0.2, (0.01, 0.5), "Slice layer height in mm."),
         ('shell_count',       int,      2, (1, 10),     "Number of outer shells to print."),
+        ('random_starts',     bool,   True, None,       "Enable randomizing of perimeter starts."),
         ('top_layers',        int,      3, (0, 10),     "Number of layers to print on the top side of the object."),
         ('bottom_layers',     int,      3, (0, 10),     "Number of layers to print on the bottom side of the object."),
         ('infill_type',       list, 'Grid', ['Lines', 'Triangles', 'Grid', 'Hexagons'], "Pattern that the infill will be printed in."),
@@ -36,7 +38,7 @@ slicer_configs = OrderedDict([
         ('raft_layers',       int,      3, (1, 5),      "Number of layers to use in making the raft."),
         ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
         ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
-        ('skirt_layers',      int,      1, (1, 1000),   "Number of layers to print print the skirt on."),
+        ('skirt_layers',      int,      0, (0, 1000),   "Number of layers to print print the skirt on."),
         ('prime_length',      float, 10.0, (0., 1000.), "Length of filament to extrude when priming hotends."),
     )),
     ('Retraction', (
@@ -282,7 +284,7 @@ class Slicer(object):
         self.infill_width = infl_nozl_d * self.extrusion_ratio
         self.support_width = supp_nozl_d * self.extrusion_ratio
         for model in self.models:
-            model.center( (self.center_point[0], self.center_point[1], -model.points.minz) )
+            model.center( (self.center_point[0], self.center_point[1], (model.points.maxz-model.points.minz)/2.0) )
             model.assign_layers(self.layer_h)
         height = max([model.points.maxz - model.points.minz for model in self.models])
         self.layers = int(height / self.layer_h)
@@ -341,24 +343,36 @@ class Slicer(object):
         self.layer_paths = []
         self.perimeter_paths = []
         self.skirt_bounds = []
+        random_starts = self.conf['random_starts']
+        self.dead_paths = []
         for layer in range(self.layers):
             self.thermo.update(layer)
 
             # Layer Slicing
             z = self.layer_zs[layer]
             paths = []
+            layer_dead_paths = []
             for model in self.models:
-                model_paths = model.slice_at_z(z - self.layer_h/2, self.layer_h)
+                model_paths, dead_paths = model.slice_at_z(z - self.layer_h/2, self.layer_h)
+                layer_dead_paths.extend(dead_paths)
                 model_paths = geom.orient_paths(model_paths)
                 paths = geom.union(paths, model_paths)
             self.layer_paths.append(paths)
+            self.dead_paths.append(layer_dead_paths)
 
             # Perimeters
             perims = []
+            randpos = random.random()
             for i in range(self.conf['shell_count']):
                 shell = geom.offset(paths, -(i+0.5) * self.extrusion_width)
                 shell = geom.close_paths(shell)
-                perims.append(shell)
+                if self.conf['random_starts']:
+                    shell = [
+                        ( path if i == 0 else (path[i:] + path[1:i+1]) )
+                        for path in shell
+                        for i in [ int(randpos * (len(path)-1)) ]
+                    ]
+                perims.insert(0, shell)
             self.perimeter_paths.append(perims)
 
             # Calculate horizontal bounding path
@@ -371,15 +385,15 @@ class Slicer(object):
             self.thermo.update(self.layers+layer)
 
             # Top and Bottom masks
-            below = [] if layer < 1 else self.perimeter_paths[layer-1][-1]
-            perim = self.perimeter_paths[layer][-1]
-            above = [] if layer >= self.layers-1 else self.perimeter_paths[layer+1][-1]
+            below = [] if layer < 1 else self.perimeter_paths[layer-1][0]
+            perim = self.perimeter_paths[layer][0]
+            above = [] if layer >= self.layers-1 else self.perimeter_paths[layer+1][0]
             self.top_masks.append(geom.diff(perim, above))
             self.bot_masks.append(geom.diff(perim, below))
         self.thermo.clear()
 
     def _slicer_task_support(self):
-        self.thermo.set_target(4.0)
+        self.thermo.set_target(5.0)
 
         self.support_outline = []
         self.support_infill = []
@@ -388,31 +402,40 @@ class Slicer(object):
             return
         supp_ang = self.conf['overhang_angle']
         outset = self.conf['support_outset']
+        layer_height = self.conf['layer_height']
 
         facets = [facet for model in self.models for facet in model.get_facets()]
         facet_cnt = len(facets)
-        drop_paths = [[] for layer in range(self.layers)]
+        layer_facets = [[] for layer in range(self.layers)]
         for fnum, facet in enumerate(facets):
-            self.thermo.update((fnum+0.0)/facet_cnt)
-            if facet.overhang_angle() < supp_ang:
-                continue
+            self.thermo.update(0 + float(fnum)/facet_cnt)
             minz, maxz = facet.z_range()
-            footprint = facet.get_footprint()
-            if not footprint:
-                break
-            for layer in range(self.layers):
-                z = self.layer_zs[layer]
-                if z > maxz:
-                    break
-                if z >= minz:
-                    footprint = facet.get_footprint(z=z)
-                    if not footprint:
-                        break
-                drop_paths[layer].append(footprint)
+            minl = int(math.ceil(minz/layer_height))
+            maxl = int(math.floor(maxz/layer_height))
+            for layer in range(minl, maxl):
+                layer_facets[layer].append(facet)
+
+        drop_mask = []
+        drop_paths = [[] for layer in range(self.layers)]
+        for layer in reversed(range(self.layers)):
+            self.thermo.update(1 + float(self.layers-1-layer)/self.layers)
+            adds = []
+            diffs = []
+            for facet in layer_facets[layer]:
+                footprint = facet.get_footprint()
+                if not footprint:
+                    continue
+                if facet.overhang_angle() < supp_ang:
+                    diffs.append(footprint)
+                else:
+                    adds.append(footprint)
+            drop_mask = geom.union(drop_mask, adds)
+            drop_mask = geom.diff(drop_mask, diffs)
+            drop_paths[layer] = drop_mask
 
         cumm_mask = []
         for layer in range(self.layers):
-            self.thermo.update(1 + (0.0+layer)/self.layers)
+            self.thermo.update(2 + float(layer)/self.layers)
 
             # Remove areas too close to model
             mask = geom.offset(self.layer_paths[layer], outset)
@@ -432,7 +455,7 @@ class Slicer(object):
             drop_paths[layer] = geom.close_paths(overhang)
 
         for layer in range(self.layers):
-            self.thermo.update(2 + (2.0+layer)/self.layers)
+            self.thermo.update(3 + float(layer)/self.layers)
 
             # Generate support infill
             outline = []
@@ -515,8 +538,8 @@ class Slicer(object):
                 outmask = geom.union(outmask, geom.close_paths(mask))
             for mask in bot_masks:
                 outmask = geom.union(outmask, geom.close_paths(mask))
-            solid_mask = geom.clip(outmask, perims[-1])
-            bounds = geom.paths_bounds(perims[-1])
+            solid_mask = geom.clip(outmask, perims[0])
+            bounds = geom.paths_bounds(perims[0])
 
             # Solid Infill
             solid_infill = []
@@ -536,7 +559,7 @@ class Slicer(object):
             if density > 0.0:
                 if density >= 0.99:
                     infill_type = "Lines"
-                mask = geom.offset(perims[-1], self.conf['infill_overlap']-self.infill_width)
+                mask = geom.offset(perims[0], self.conf['infill_overlap']-self.infill_width)
                 mask = geom.diff(mask, solid_mask)
                 if infill_type == "Lines":
                     base_ang = 90 * (layer % 2) + 45
@@ -632,7 +655,7 @@ class Slicer(object):
                 self._add_raw_layer_paths(layer, outline, self.support_width, self.supp_nozl)
                 self._add_raw_layer_paths(layer, self.support_infill[slicenum], self.support_width, self.supp_nozl)
 
-            for paths in reversed(self.perimeter_paths[slicenum]):
+            for paths in self.perimeter_paths[slicenum]:
                 paths = geom.close_paths(paths)
                 self._add_raw_layer_paths(layer, paths, self.extrusion_width, self.dflt_nozl)
             self._add_raw_layer_paths(layer, self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl)
@@ -845,6 +868,8 @@ class Slicer(object):
             if layernum in self.raw_layer_paths and self.raw_layer_paths[layernum][nozl]:
                 for paths, width in self.raw_layer_paths[layernum][nozl]:
                     self._draw_line(paths, colors=nozl_colors[nozl], ewidth=width)
+        self._draw_line(self.layer_paths[self.layer], colors=["#cc0"], ewidth=self.extrusion_width/8.0)
+        self._draw_line(self.dead_paths[self.layer], colors=["red"], ewidth=self.extrusion_width/8.0)
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
         wincx = self.master.winfo_width() / 2
@@ -862,7 +887,7 @@ class Slicer(object):
             color = colors[(pathnum + offset) % len(colors)]
             self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle="round", joinstyle="round")
             self.canvas.create_line([path[0],path[0]], fill="blue", width=self.mag*ewidth, capstyle="round", joinstyle="round")
-            self.canvas.create_line([path[-1],path[-1]], fill="red", width=self.mag*ewidth, capstyle="round", joinstyle="round")
+            self.canvas.create_line([path[-1],path[-1]], fill="cyan", width=self.mag*ewidth, capstyle="round", joinstyle="round")
 
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap
