@@ -805,15 +805,43 @@ class Slicer(object):
 
     def _display_paths(self):
         try:  # Python 2
-            from Tkinter import (Tk, Canvas, mainloop)
+            from Tkinter import (Tk, Canvas, Label, Frame, Scrollbar, mainloop)
+            from ttk import Progressbar, Style
         except ImportError:  # Python 3
-            from tkinter import (Tk, Canvas, mainloop)
+            from tkinter import (Tk, Canvas, Label, Frame, Scrollbar, mainloop)
+            from tkinter.ttk import Progressbar, Style
         self.layer = 0
         self.mag = 5.0
         self.master = Tk()
-        self.canvas = Canvas(self.master, width=800, height=600)
-        self.canvas.pack(fill="both", expand=1)
+        self.master.title("Mandoline - Layer Paths")
+        self.info_fr = Frame(self.master)
+        self.info_fr.pack(side="top", fill="x", expand=True)
+        self.zoom_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.zoom_lbl.pack(side="left")
+        self.layer_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.layer_lbl.pack(side="left")
+        self.zed_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.zed_lbl.pack(side="left")
+        self.progbar = Progressbar(self.info_fr, orient="horizontal", length=200, value=0, maximum=100, mode="determinate")
+        self.progbar.pack(side="left", fill="y", pady=5)
+        st = Style()
+        st.theme_use("clam")
+        st.configure("bar.Horizontal.TProgressbar", troughcolor="white", foreground="blue", background="white")
+        self.fr = Frame(self.master)
+        self.fr.pack(fill="both", expand=True)
+        self.fr.grid_rowconfigure(0, weight=1)
+        self.fr.grid_columnconfigure(0, weight=1)
+        self.canvas = Canvas(self.fr, width=800, height=600, scrollregion=(0,0,1000,1000))
+        self.hbar = Scrollbar(self.fr, orient="horizontal", command=self.canvas.xview)
+        self.vbar = Scrollbar(self.fr, orient="vertical", command=self.canvas.yview)
+        self.canvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
+        self.hbar.grid(row=1, column=0, sticky="ew")
+        self.vbar.grid(row=0, column=1, sticky="ns")
+        self.canvas.grid(row=0, column=0, sticky="nsew")
         self.canvas.focus()
+        self.canvas.bind_all('<Shift-MouseWheel>', lambda event: self.canvas.xview_scroll(int(-abs(event.delta)/event.delta), "units"))
+        self.canvas.bind_all('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-abs(event.delta)/event.delta), "units"))
+        self.canvas.bind_all('<Control-MouseWheel>', lambda event: self._zoom(incdec=int(-abs(event.delta)/event.delta)))
         self.master.bind("<Key-Prior>", lambda e: self._redraw_paths(incdec=10))
         self.master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
         self.master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
@@ -827,35 +855,53 @@ class Slicer(object):
         self.master.bind("<Key-q>", lambda e: sys.exit(0))
         self.master.bind("<Key-Escape>", lambda e: sys.exit(0))
         self._redraw_paths()
+        size_x = self.conf['bed_size_x']
+        size_y = self.conf['bed_size_y']
+        cx = self.conf['bed_center_x']
+        cy = self.conf['bed_center_y']
+        neww = (cx-400/self.mag)/size_x
+        newh = (cy-300/self.mag)/size_y
+        self.canvas.xview("moveto", neww)
+        self.canvas.yview("moveto", newh)
         mainloop()
 
     def _zoom(self, incdec=0, val=None):
+        self.master.update()
+        winx = self.canvas.winfo_width()
+        winy = self.canvas.winfo_height()
+        cx = self.canvas.canvasx(int(winx/2))/self.mag
+        cy = self.canvas.canvasy(int(winy/2))/self.mag
+        size_x = self.conf['bed_size_x']
+        size_y = self.conf['bed_size_y']
         if val is None:
             self.mag = max(1, self.mag+incdec)
         else:
             self.mag = val
         self._redraw_paths()
+        neww = (cx-winx/2/self.mag)/size_x
+        newh = (cy-winy/2/self.mag)/size_y
+        self.canvas.xview("moveto", neww)
+        self.canvas.yview("moveto", newh)
 
     def _redraw_paths(self, incdec=0):
         self.layer = min(max(0, self.layer + incdec), len(self.perimeter_paths)-1+self.raft_layers)
         layernum = self.layer
         layers = self.raft_layers + self.layers
+        center_x = self.conf['bed_center_x']
+        center_y = self.conf['bed_center_y']
+        size_x = self.conf['bed_size_x']
+        size_y = self.conf['bed_size_y']
+        minx = (center_x - size_x/2) * self.mag
+        maxx = (center_x + size_x/2) * self.mag
+        miny = (center_y - size_y/2) * self.mag
+        maxy = (center_y + size_y/2) * self.mag
+        self.zoom_lbl.config(text="Zoom: {}%".format(int(self.mag*100/5.0)))
+        self.layer_lbl.config(text="Layer: {}/{}".format(layernum, layers-1))
+        self.zed_lbl.config(text="Z: {:.3f}".format(self.layer_zs[layernum]))
         self.canvas.delete("all")
-        self.canvas.create_text(
-            (30, 550), anchor="nw",
-            text="Layer {layer}/{layers}\nZ: {z:.2f}\nZoom: {zoom:.1f}%".format(
-                layer=layernum,
-                layers=layers-1,
-                z=self.layer_zs[layernum],
-                zoom=self.mag*100/5.0
-            )
-        )
-        barpos = (150,570)
-        barsize = (500,10)
-        pcnt = layernum / (layers-1.0)
-        self.canvas.create_rectangle(barpos[0]-1,barpos[1]-1,barpos[0]+barsize[0]+1,barpos[1]+barsize[1]+1,outline="black")
-        if pcnt * barsize[0] > 1.0:
-            self.canvas.create_rectangle(barpos[0],barpos[1],barpos[0]+int(barsize[0]*pcnt),barpos[1]+barsize[1],outline="blue",fill="blue")
+        self.canvas.config(scrollregion=(minx,miny,maxx,maxy))
+        self.progbar['value'] = layernum
+        self.progbar['maximum'] = layers-1
 
         # nozl_colors = [
         #     ["#070", "#0c0", "#0f0", "#7f7"],
@@ -872,18 +918,16 @@ class Slicer(object):
         self._draw_line(self.dead_paths[self.layer], colors=["red"], ewidth=self.extrusion_width/8.0)
 
     def _draw_line(self, paths, offset=0, colors=["red", "green", "blue"], ewidth=0.5):
-        wincx = self.master.winfo_width() / 2
-        wincy = self.master.winfo_height() / 2
-        wincx = wincx if wincx > 1 else 400
-        wincy = wincy if wincy > 1 else 300
-        minx = min(model.points.minx for model in self.models)
-        maxx = max(model.points.maxx for model in self.models)
-        miny = min(model.points.miny for model in self.models)
-        maxy = max(model.points.maxy for model in self.models)
-        cx = (maxx + minx)/2.0
-        cy = (maxy + miny)/2.0
+        center_x = self.conf['bed_center_x']
+        center_y = self.conf['bed_center_y']
+        size_x = self.conf['bed_size_x']
+        size_y = self.conf['bed_size_y']
+        minx = (center_x - size_x/2) * self.mag
+        maxx = (center_x + size_x/2) * self.mag
+        miny = (center_y - size_y/2) * self.mag
+        maxy = (center_y + size_y/2) * self.mag
         for pathnum, path in enumerate(paths):
-            path = [(wincx+(x-cx)*self.mag, wincy+(cy-y)*self.mag) for x, y in path]
+            path = [(x*self.mag, maxy-y*self.mag) for x, y in path]
             color = colors[(pathnum + offset) % len(colors)]
             self.canvas.create_line(path, fill=color, width=self.mag*ewidth, capstyle="round", joinstyle="round")
             self.canvas.create_line([path[0],path[0]], fill="blue", width=self.mag*ewidth, capstyle="round", joinstyle="round")
