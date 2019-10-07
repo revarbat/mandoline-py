@@ -5,6 +5,7 @@ import math
 import time
 import random
 import os.path
+import platform
 from collections import OrderedDict
 from appdirs import user_config_dir
 
@@ -841,7 +842,7 @@ class Slicer(object):
         self.canvas.focus()
         self.canvas.bind_all('<Shift-MouseWheel>', lambda event: self.canvas.xview_scroll(int(-abs(event.delta)/event.delta), "units"))
         self.canvas.bind_all('<MouseWheel>', lambda event: self.canvas.yview_scroll(int(-abs(event.delta)/event.delta), "units"))
-        self.canvas.bind_all('<Control-MouseWheel>', lambda event: self._zoom(incdec=int(-abs(event.delta)/event.delta)))
+        self.canvas.bind_all('<Control-MouseWheel>', lambda event: self._zoom(incdec=int(abs(event.delta)/event.delta)))
         self.master.bind("<Key-Prior>", lambda e: self._redraw_paths(incdec=10))
         self.master.bind("<Key-Up>", lambda e: self._redraw_paths(incdec=1))
         self.master.bind("<Key-Down>", lambda e: self._redraw_paths(incdec=-1))
@@ -863,6 +864,8 @@ class Slicer(object):
         newh = (cy-300/self.mag)/size_y
         self.canvas.xview("moveto", neww)
         self.canvas.yview("moveto", newh)
+        if platform.system() == "Darwin":
+            os.system('''/usr/bin/osascript -e 'tell app "Finder" to set frontmost of process "Python" to true' ''')
         mainloop()
 
     def _zoom(self, incdec=0, val=None):
