@@ -815,18 +815,18 @@ class Slicer(object):
         self.mag = 5.0
         self.master = Tk()
         self.master.title("Mandoline - Layer Paths")
-        self.info_fr = Frame(self.master)
-        self.info_fr.pack(side="top", fill="x", expand=True)
-        self.zoom_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.info_fr = Frame(self.master, bd=2, relief="flat", bg="#ccc")
+        self.info_fr.pack(side="top", fill="x", expand=False)
+        self.zoom_lbl = Label(self.info_fr, anchor="w", width=16, bg="#ccc")
         self.zoom_lbl.pack(side="left")
-        self.layer_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.layer_lbl = Label(self.info_fr, anchor="w", width=16, bg="#ccc")
         self.layer_lbl.pack(side="left")
-        self.zed_lbl = Label(self.info_fr, anchor="w", width=16)
+        self.zed_lbl = Label(self.info_fr, anchor="w", width=16, bg="#ccc")
         self.zed_lbl.pack(side="left")
         self.progbar = Progressbar(self.info_fr, orient="horizontal", length=200, value=0, maximum=100, mode="determinate")
         self.progbar.pack(side="left", fill="y", pady=5)
         st = Style()
-        st.theme_use("clam")
+        st.theme_use("default")
         st.configure("bar.Horizontal.TProgressbar", troughcolor="white", foreground="blue", background="white")
         self.fr = Frame(self.master)
         self.fr.pack(fill="both", expand=True)
@@ -906,6 +906,11 @@ class Slicer(object):
         self.progbar['value'] = layernum
         self.progbar['maximum'] = layers-1
 
+        grid_colors = ["#ccf", "#eef"]
+        for x in range(int(size_x/10)):
+            for y in range(int(size_y/10)):
+                rect = [val*10*self.mag for val in (x, y, x+1, y+1)]
+                self.canvas.create_rectangle(rect, fill=grid_colors[(x+y)%2])
         # nozl_colors = [
         #     ["#070", "#0c0", "#0f0", "#7f7"],
         #     ["#770", "#aa0", "#dd0", "#ff0"],
