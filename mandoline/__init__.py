@@ -2,8 +2,11 @@ import sys
 import os.path
 import argparse
 
+# import pyximport; pyximport.install()
+
 from .stl_data import StlData
 from mandoline.slicer import Slicer
+
 
 def main():
     parser = argparse.ArgumentParser(prog='myprogram')
