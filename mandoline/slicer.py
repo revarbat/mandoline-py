@@ -502,7 +502,7 @@ class Slicer(object):
         raft_outline = []
         raft_infill = []
         if adhesion == "Raft":
-            rings = int(math.ceil(brin_w/self.extrusion_width))
+            rings = int(math.ceil(brim_w/self.extrusion_width))
             outset = raft_w + max(
                 skirt_w + self.extrusion_width,
                 self.conf['raft_outset'] + self.extrusion_width
