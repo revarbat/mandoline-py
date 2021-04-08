@@ -5,13 +5,14 @@ import sys
 import math
 import time
 import struct
+import json
 from pyquaternion import Quaternion
 
-from .TextThermometer import TextThermometer
-from .point3d import Point3DCache
-from .vector import Vector
-from .facet3d import Facet3DCache
-from .line_segment3d import LineSegment3DCache
+from TextThermometer import TextThermometer
+from point3d import Point3DCache
+from vector import Vector
+from facet3d import Facet3DCache
+from line_segment3d import LineSegment3DCache
 
 
 class StlEndOfFileException(Exception):
@@ -122,7 +123,7 @@ class StlData(object):
     def read_file(self, filename):
         """Read the model data from the given STL file."""
         self.filename = filename
-        print("Loading model")
+        print("Loading model \"{}\"".format(filename))
         file_size = os.path.getsize(filename)
         with open(filename, 'rb') as f:
             line = f.readline(80)
@@ -203,17 +204,17 @@ class StlData(object):
         self.dupe_faces = self._check_manifold_duplicate_faces()
         for face in self.dupe_faces:
             is_manifold = False
-            print("NON-MANIFOLD DUPLICATE FACE! {0}: {1}"
+            print("WARN: NON-MANIFOLD DUPLICATE FACE! {0}: {1}"
                   .format(self.filename, face))
         self.hole_edges = self._check_manifold_hole_edges()
         for edge in self.hole_edges:
             is_manifold = False
-            print("NON-MANIFOLD HOLE EDGE! {0}: {1}"
+            print("WARN: NON-MANIFOLD HOLE EDGE! {0}: {1}"
                   .format(self.filename, edge))
         self.dupe_edges = self._check_manifold_excess_edges()
         for edge in self.dupe_edges:
             is_manifold = False
-            print("NON-MANIFOLD DUPLICATE EDGE! {0}: {1}"
+            print("WARN: NON-MANIFOLD DUPLICATE EDGE! {0}: {1}"
                   .format(self.filename, edge))
         return is_manifold
 
@@ -236,6 +237,12 @@ class StlData(object):
         self.edges.translate(offset)
         self.facets.translate(offset)
 
+    def scale(self, scale): 
+        """Scale vertices of all facets in the STL model."""
+        self.points.scale(scale)
+        self.edges.scale(scale)
+        self.facets.scale(scale)
+           
     def assign_layers(self, layer_height):
         """Calculate which layers intersect which facets, for faster lookup."""
         self.layer_facets = {}
@@ -309,7 +316,9 @@ class StlData(object):
                 paths[key1] = []
             paths[key1].append(path)
         if deadpaths:
-            print("\nIncomplete Polygon at z=%s" % z)
+            print("\nWARN: Incomplete Polygon at z=%s" % z)
+            if self.debug:
+               print(json.dumps(deadpaths))
         return (outpaths, deadpaths)
 
 

@@ -6,9 +6,9 @@ try:
 except ImportError:
     from itertools import izip_longest as ziplong
 
-from .vector import Vector
-from .point3d import Point3D
-from .line_segment3d import LineSegment3D
+from vector import Vector
+from point3d import Point3D
+from line_segment3d import LineSegment3D
 
 
 class Facet3D(object):
@@ -115,6 +115,11 @@ class Facet3D(object):
         for a in range(3):
             for v in self.vertices:
                 v[a] += offset[a]
+
+    def scale(self, scale):
+        for a in range(3):
+            for v in self.vertices:
+                v[a] *= scale[a]
 
     def get_footprint(self, z=None):
         if z is None:
@@ -265,6 +270,12 @@ class Facet3DCache(object):
         """Translates vertices of all facets in the facet cache."""
         for facet in self.facet_hash.values():
             facet.translate(offset)
+        self.rehash()
+
+    def scale(self, scale):
+        """Scales vertices of all facets in the facet cache."""
+        for facet in self.facet_hash.values():
+            facet.scale(scale)
         self.rehash()
 
     def _add_vertex(self, pt, facet):

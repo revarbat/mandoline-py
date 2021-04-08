@@ -1,0 +1,28 @@
+2021/04/06: 0.8.4: Rene K. Mueller
+  - SVG output: supporting slicing to SVG, using "-o test.svg", very experimental
+  - intern: model.scale([x,y,z]) implemented
+  - cli: support for `-M scale=s` or `-M scale=x,y,z`
+  - intern: fixed vector.py normalize() and __truediv__() supporting STL with bad normals
+  - un/retract enabled again
+  
+2021/04/04: 0.8.3: Rene K. Mueller
+  - cli & extending configs: 
+    - cool_fan_speed_{min/max}
+    - cool_fan_full_layer=2 (starting fan after e.g. layer 2 is reached), 
+    - start_gcode and end_gcode and new config type 'str' as well
+    - skirt_lines=3 only considered if skirt_layers != 0
+    - gcode_comments = True|False (adding various useful info in Gcode)
+    - random_pos = True|False: randomize position of model on the build-plate
+  - all the config included in Gcode
+  - intern: carrying over 'typ' ('type' in python ;-) of the extrusion in _raw_add_paths, 
+            to refine the retract/unretract, this allowed
+            have output gcode more descriptive with ';TYPE:..', 
+  - cli: support `-l` or `--load=...` to load more configs (e.g. per printer, or material)
+  - cli: support `-Q <term>` partial match
+  - output filament used at the end of slicing
+  + most un/retract disabled for now to confirm extrusion calculation working
+  - prints simple models like 10/20mm cube and xyzHollowCalibrationCubeV2
+  - finally was able to to run code without build & install, me newbie with python
+  - changed various `from ... import ...` to work locally
+  - created Makefile to support `make build install`
+  
