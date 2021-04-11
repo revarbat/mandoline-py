@@ -7,7 +7,7 @@ try:
 except ImportError:
     from itertools import izip_longest as ziplong
 
-from .float_fmt import float_fmt
+from float_fmt import float_fmt
 
 
 class Vector(object):
@@ -75,7 +75,7 @@ class Vector(object):
     def __radd__(self, v):
         return Vector(i + j for i, j in zip(v, self._values))
 
-    def __div__(self, s):
+    def __truediv__(self, s):
         """Divide each element in a vector by a scalar."""
         return Vector(x / (s+0.0) for x in self._values)
 
@@ -121,7 +121,8 @@ class Vector(object):
 
     def normalize(self):
         """Normalizes the given vector to be unit-length."""
-        return self / self.length()
+        l = self.length()
+        return self / (l if l > 0.0 else 1.0)
 
     def angle(self, other):
         """Returns angle in radians between this and another vector."""

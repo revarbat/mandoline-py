@@ -1,10 +1,7 @@
 import math
-
 import pyclipper
 
-
 SCALING_FACTOR = 1000
-
 
 def offset(paths, amount):
     pco = pyclipper.PyclipperOffset()

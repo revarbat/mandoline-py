@@ -7,7 +7,7 @@ try:
 except ImportError:
     from itertools import izip_longest as ziplong
 
-from .float_fmt import float_fmt
+from float_fmt import float_fmt
 
 
 class Point3D(object):
@@ -111,6 +111,10 @@ class Point3D(object):
         """Translates the coordinates of this point."""
         self._values = [i + j for i, j in zip(offset, self._values)]
 
+    def scale(self, scale):
+        """Scale the coordinates of this point."""
+        self._values = [i * j for i, j in zip(scale, self._values)]
+
     def distFromPoint(self, v):
         """Returns the distance from another point."""
         return math.sqrt(sum(math.pow(x1-x2, 2.0) for x1, x2 in zip(v, self)))
@@ -175,6 +179,18 @@ class Point3DCache(object):
         self.maxz += offset[2]
         for pt in self.point_hash.values():
             pt.translate(offset)
+        self.rehash()
+
+    def scale(self, scale):
+        self.minx = 9e99
+        self.miny = 9e99
+        self.minz = 9e99
+        self.maxx = -9e99
+        self.maxy = -9e99
+        self.maxz = -9e99
+        for pt in self.point_hash.values():
+            pt.scale(scale)
+            self._update_volume(pt)
         self.rehash()
 
     def get_volume(self):

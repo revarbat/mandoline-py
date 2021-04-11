@@ -1,22 +1,29 @@
+# == slicer.py ==
+#   written by Revar Desmera (2017/11)
+#   extended by Rene K. Mueller (2021/04)
+
 from __future__ import print_function
 
+import re
 import sys
 import math
 import time
+import datetime
 import random
 import os.path
 import platform
 from collections import OrderedDict
 from appdirs import user_config_dir
 
-import mandoline.geometry2d as geom
-from .TextThermometer import TextThermometer
-
+import geometry2d as geom
+from TextThermometer import TextThermometer
 
 slicer_configs = OrderedDict([
     ('Quality', (
         ('layer_height',      float,  0.2, (0.01, 0.5), "Slice layer height in mm."),
         ('shell_count',       int,      2, (1, 10),     "Number of outer shells to print."),
+        ('shell_speed',       float,    0, (0, 500),    "The shell speed (mm/s)"),
+        # ('outer_shell_speed',  float,   20, (1, 500),    "The outer shell speed (mm/s)"),  
         ('random_starts',     bool,   True, None,       "Enable randomizing of perimeter starts."),
         ('top_layers',        int,      3, (0, 10),     "Number of layers to print on the top side of the object."),
         ('bottom_layers',     int,      3, (0, 10),     "Number of layers to print on the bottom side of the object."),
@@ -38,13 +45,14 @@ slicer_configs = OrderedDict([
         ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
         ('raft_layers',       int,      3, (1, 5),      "Number of layers to use in making the raft."),
         ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
-        ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
-        ('skirt_layers',      int,      0, (0, 1000),   "Number of layers to print print the skirt on."),
-        ('prime_length',      float, 10.0, (0., 1000.), "Length of filament to extrude when priming hotends."),
+        ('skirt_outset',      float,  3.0, (0., 20.),   "How far the skirt should be printed away from model."),
+        ('skirt_layers',      int,      0, (0, 1000),   "Number of layers to print the skirt on."),
+        ('skirt_lines',       int,      2, (0, 1000),   "Number of skirt lines to print."),
+        ('prime_length',      float,    0, (0., 1000.), "Length of filament to extrude when priming hotends."),
     )),
     ('Retraction', (
         ('retract_enable',    bool,   True, None,       "Enable filament retraction."),
-        ('retract_speed',     float,  30.0, (0., 200.), "Speed to retract filament at. (mm/s)"),
+        ('retract_speed',     float,  60.0, (0., 200.), "Speed to retract filament at. (mm/s)"),
         ('retract_dist',      float,   3.0, (0., 20.),  "Distance to retract filament between extrusion moves. (mm)"),
         ('retract_extruder',  float,   3.0, (0., 50.),  "Distance to retract filament on extruder change. (mm)"),
         ('retract_lift',      float,   0.0, (0., 10.),  "Distance to lift the extruder head during retracted moves. (mm)"),
@@ -92,11 +100,20 @@ slicer_configs = OrderedDict([
         ('bed_center_y',      float,  100, (-500,500),  "The Y coordinate of the center of the bed."),
         ('bed_temp',          int,     70, (0, 150),    "The temperature to set the heated bed to."),
 
-        ('extruder_count',    int,      1, (1, 4),      "The number of extruders this machine has."),
+        ('extruder_count',    int,      1, (1, 16),     "The number of extruders this machine has."),
         ('default_nozzle',    int,      0, (0, 4),      "The default extruder used for printing."),
         ('infill_nozzle',     int,     -1, (-1, 4),     "The extruder used for infill material.  -1 means use default nozzle."),
         ('support_nozzle',    int,     -1, (-1, 4),     "The extruder used for support material.  -1 means use default nozzle."),
+        ('cool_fan_speed_max',float,  100, (0,100),     "The fan speed max (%)"),
+        ('cool_fan_speed_min',float,  20, (0,100),      "The fan speed min (%)"),
+        ('cool_fan_full_layer',int, 2, (0,1000),        "The layer the cool fan runs at max (layer)"),
+        ('bridge_fan_speed',  float,  100, (0,100),     "The fan speed min (%)"),
 
+        ('start_gcode',        str, 'G28 X0 Y0 ;auto-home all axes\nG28 Z0 ;auto-home all axes', None,           "The starting Gcode"),
+        ('end_gcode',          str, 'G91 ;relative position\nG1 Z1\nG28 X ;home X-wise\nM84 ;motors off\nG90 ;absolute positioning', None,      "The end Gcode"),
+        ('gcode_comments',     bool, True, None,        "Enable/disable Gcode comments"),
+        ('random_pos',         bool, False, None,       "Enable/disable random positioning of model"),
+        
         ('nozzle_0_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
         ('nozzle_0_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 0. (mm)"),
         ('nozzle_0_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 0. (mm)"),
@@ -124,7 +141,7 @@ slicer_configs = OrderedDict([
         ('nozzle_3_xoff',      float,  0.0, (-100, 100), "The X positional offset for extruder 3. (mm)"),
         ('nozzle_3_yoff',      float, 25.0, (-100, 100), "The Y positional offset for extruder 3. (mm)"),
         ('nozzle_3_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 3. (mm/s)"),
-    )),
+    ))
 ])
 
 
@@ -152,6 +169,8 @@ class Slicer(object):
         self.total_build_time = 0.0
         self.mag = 4
         self.layer = 0
+        self.last_typ = ''
+        self.last_retract_typ = ''
         self.config(**kwargs)
 
     def config(self, **kwargs):
@@ -164,9 +183,10 @@ class Slicer(object):
 
     def set_config(self, key, valstr):
         key = key.strip()
+        key = key.replace('-','_')
         valstr = valstr.strip()
         if key not in self.conf_metadata:
-            print("Ignoring unknown config option: {}".format(key))
+            print("WARN: Ignoring unknown config option: {}".format(key))
             return
         typ = self.conf_metadata[key]["type"]
         rng = self.conf_metadata[key]["range"]
@@ -197,6 +217,10 @@ class Slicer(object):
                     badval = False
             except(ValueError):
                 pass
+        elif typ is str:
+            typestr = "string "
+            self.conf[key] = valstr
+            badval = False
         elif typ is list:
             typestr = ""
             errmsg = "Valid options are: {}".format(", ".join(rng))
@@ -204,16 +228,19 @@ class Slicer(object):
                 self.conf[key] = str(valstr)
                 badval = False
         if badval:
-            print("Ignoring bad {0}configuration value: {1}={2}".format(typestr,key,valstr))
+            print("WARN: Ignoring bad {0}configuration value: {1}={2}".format(typestr,key,valstr))
             print(errmsg)
 
-    def load_configs(self):
-        conffile = self.get_conf_filename()
+    def load_configs(self, conffile=""):
+        if conffile=="": 
+           conffile = self.get_conf_filename()
+        if self.args.verbose > 0:
+           print("Checking configs \"{}\"".format(conffile))
         if not os.path.exists(conffile):
             return
         if not os.path.isfile(conffile):
             return
-        print("Loading configs from {}".format(conffile))
+        print("Loading configs from \"{}\"".format(conffile))
         with open(conffile, "r") as f:
             for line in f.readlines():
                 line = line.strip()
@@ -236,16 +263,24 @@ class Slicer(object):
         print("Saving configs to {}".format(conffile))
 
     def display_configs_help(self, key=None, vals_only=False):
-        if key:
+        keys = []
+
+        if key:                                     # -- query
             key = key.strip()
-            if key not in self.conf_metadata:
-                print("Unknown config option: {}".format(key))
-                return
+            key = key.replace('-','_')
+            for s, opts in slicer_configs.items():
+                for k in opts:
+                    if re.search(key,k[0]):         # -- match partial name match
+                        keys.append(k[0])
+            if len(keys) == 0:
+               print("Unknown config option: {}".format(key))
+               return
+             
         for sect, opts in slicer_configs.items():
             if not vals_only and not key:
                 print("{}:".format(sect))
             for name, typ, dflt, rng, desc in opts:
-                if key and key != name:
+                if key and name not in keys:
                     continue
                 if typ is bool:
                     typename = "bool"
@@ -265,7 +300,9 @@ class Slicer(object):
                     print("          {}".format(desc))
 
     def slice_to_file(self, filename, showgui=False):
-        print("Slicing start")
+        st = time.time()
+        
+        print("Slicing @ {:.3f}mm layer height".format(self.conf['layer_height']))
         self.dflt_nozl = self.conf['default_nozzle']
         self.infl_nozl = self.conf['infill_nozzle']
         self.supp_nozl = self.conf['support_nozzle']
@@ -280,63 +317,84 @@ class Slicer(object):
 
         self.layer_h = self.conf['layer_height']
         self.raft_layers = self.conf['raft_layers'] if self.conf['adhesion_type'] == "Raft" else 0
-        self.extrusion_ratio = 1.25
+
+        self.extrusion_ratio = 1.25             # -- ??? from where comes this number?
+
         self.extrusion_width = dflt_nozl_d * self.extrusion_ratio
         self.infill_width = infl_nozl_d * self.extrusion_ratio
         self.support_width = supp_nozl_d * self.extrusion_ratio
+
         for model in self.models:
-            model.center( (self.center_point[0], self.center_point[1], (model.points.maxz-model.points.minz)/2.0) )
+            if self.conf['random_pos']:
+                x = ((random.random()*2)-1)*(self.conf['bed_size_x']/2-(model.points.maxx-model.points.minx+10)/2)
+                y = ((random.random()*2)-1)*(self.conf['bed_size_y']/2-(model.points.maxy-model.points.miny+10)/2)
+                print("+ Random offset {},{}".format(int(x),int(y)))
+                model.center( (self.center_point[0]+int(x), self.center_point[1]+int(y), (model.points.maxz-model.points.minz)/2.0) )
+            else:
+                model.center( (self.center_point[0], self.center_point[1], (model.points.maxz-model.points.minz)/2.0) )
             model.assign_layers(self.layer_h)
+        
         height = max([model.points.maxz - model.points.minz for model in self.models])
+        
         self.layers = int(height / self.layer_h)
+        
         self.layer_zs = [
             self.layer_h * (layer + 1)
             for layer in range(self.layers + self.raft_layers)
         ]
         self.thermo = TextThermometer(self.layers)
 
-        print("Perimeters")
-        self._slicer_task_perimeters()
+        if(self.args.format is not None and self.args.format == 'svg' or re.search(r'\.svg$',filename)):
+            print("- Perimeters")
+            self._slicer_task_perimeters()
 
-        print("Support")
-        self._slicer_task_support()
-
-        print("Raft, Brim, and Skirt")
-        self._slicer_task_adhesion()
-
-        print("Infill")
-        self._slicer_task_fill()
-
-        print("Pathing")
-        self._slicer_task_pathing()
-
-        print("Writing GCode to {}".format(filename))
-        self._slicer_task_gcode(filename)
-
-        print(
-            "Slicing complete.  Estimated build time: {:d}h {:02d}m".format(
-                int(self.total_build_time/3600),
-                int((self.total_build_time%3600)/60)
+            filename = re.sub(r'\.svg$','',filename)
+            print("- Export {}x SVGs to \"{}-*.svg\"".format(self.layers,filename))
+            self._slicer_task_svg(filename)
+    
+            # self.total_build_time = self.layers * 3;
+            print(
+                "Took {:.02f}s total.".format(
+                    time.time()-st,
+                    int(self.total_build_time/3600),
+                    #int((self.total_build_time%3600)/60)
+                )
             )
-        )
-
-        if showgui:
-            print("Launching slice viewer")
-            self._display_paths()
-
-        # TODO: Enable multi-model loading/placement/rotation
-        # TODO: Verify models fit inside build volume.
-        # TODO: Interior solid infill perimeter paths
-        # TODO: Pathing type prioritization
-        # TODO: Optimize route paths
-        # TODO: Skip retraction for short motions
-        # TODO: Smooth top surfacing for non-flat surfaces
-        # TODO: G-Code custom startup/shutdown/toolchange scripts.
-        # TODO: G-Code flavors
-        # TODO: G-Code volumetric extrusion
-        # TODO: Relative E motions.
-        # TODO: Better Bridging
-
+        else:       # gcode
+            print("- Perimeters")
+            self._slicer_task_perimeters()
+    
+            print("- Support")
+            self._slicer_task_support()
+    
+            print("- Raft[{}], Brim[{}], and Skirt[{}]".format(
+               'x' if self.conf['adhesion_type']=='Raft' else ' ',
+               'x' if self.conf['adhesion_type']=='Brim' else ' ',
+               'x' if self.conf['skirt_layers']>0 and self.conf['skirt_lines'] > 0 else ' '))
+            self._slicer_task_adhesion()
+    
+            print("- Infill ({} {:.0f}%)".format(self.conf['infill_type'],self.conf['infill_density']))
+            self._slicer_task_fill()
+    
+            print("- Pathing")
+            self._slicer_task_pathing()
+    
+            print("- Export GCode to \"{}\"".format(filename))
+            self._slicer_task_gcode(filename)
+            print(
+                "Took {:.02f}s total. Estimated build time: {:d}h {:02d}m, filament used: {:.03f}m, layers: {:d}".format(
+                    time.time()-st,
+                    int(self.total_build_time/3600),
+                    int((self.total_build_time%3600)/60),
+                    self.last_e/1000,
+                    self.layers
+                )
+            )
+    
+            if showgui:
+                print("Launching slice viewer")
+                self._display_paths()
+    
     ############################################################
 
     def _slicer_task_perimeters(self):
@@ -476,19 +534,44 @@ class Slicer(object):
         self.thermo.clear()
 
     def _slicer_task_adhesion(self):
-        adhesion = self.conf['adhesion_type']
+        adhesion = self.conf['adhesion_type']           # -- brim or raft (exclusive)
         skirt_w  = self.conf['skirt_outset']
         brim_w   = self.conf['brim_width']
         raft_w   = self.conf['raft_outset']
 
-        # Skirt
-        if self.support_outline:
-            skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
-        else:
-            skirt_mask = geom.offset(self.skirt_bounds, skirt_w)
-        skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
-        self.skirt_paths = geom.close_paths(skirt)
+        if self.conf['adhesion_type'] != 'Brim':
+           brim_w = 0
 
+        # -- FIXME: there is a bit of a semantic mess here, *_w actually are widths, but is mixed with outsets/distances
+        #           consider support_outline, brim, and skirt_lines + skirt_outsets
+        #
+        #  without raft:
+        #               MMMMMMMM                hint: brim always aligns to model (M)
+        #  _____sss__bbbMMMMMMMMbbb__sss______
+        #        ^  ^ ^-brim_width[mm]
+        #        |  skirt_outset
+        #        3 skrit_lines[int]
+        
+        #  with raft:
+        #               MMMMMMMM                hint: model on top of raft, skirt & brim disregarded
+        #               MMMMMMMM
+        #  __________rrrrrrrrrrrrrr___________
+    
+        # Skirt
+        if 1:        # -- new take: multiple lines
+            skirts = []
+            for i in range(self.conf['skirt_lines']):
+                for path in geom.offset(self.skirt_bounds, skirt_w + (i+1)*self.extrusion_width):
+                    skirts.append(path)
+            self.skirt_paths = geom.close_paths(skirts)
+        else:       # -- old take: single line, but considers support_outline
+            if self.support_outline:
+                skirt_mask = geom.offset(geom.union(self.skirt_bounds, self.support_outline[0]), skirt_w)
+            else:
+                skirt_mask = geom.offset(self.skirt_bounds, skirt_w)
+            skirt = geom.offset(skirt_mask, brim_w + skirt_w + self.extrusion_width/2.0)
+            self.skirt_paths = geom.close_paths(skirt)
+            
         # Brim
         brim = []
         if adhesion == "Brim":
@@ -629,18 +712,21 @@ class Slicer(object):
                     stepang = 2 * math.pi / steps
                     for i in range(int(steps)):
                         nozl_path.append( [r*math.cos(i*stepang), r*math.sin(i*stepang)] )
-            self._add_raw_layer_paths(0, [nozl_path], ewidth, noznum)
+            if self.conf['prime_length'] > 0:
+                self._add_raw_layer_paths(0, [nozl_path], ewidth, noznum, [], 'prime')
 
         if self.brim_paths:
             paths = geom.close_paths(self.brim_paths)
-            self._add_raw_layer_paths(0, paths, self.support_width, self.supp_nozl)
+            self._add_raw_layer_paths(0, paths, self.support_width, self.supp_nozl, [], 'brim')
+
         if self.raft_outline:
             outline = geom.close_paths(self.raft_outline)
-            self._add_raw_layer_paths(0, outline, self.support_width, self.supp_nozl)
+            self._add_raw_layer_paths(0, outline, self.support_width, self.supp_nozl, [], 'raft-outline')
+
         if self.raft_infill:
             for layer in range(self.raft_layers):
                 paths = self.raft_infill[layer]
-                self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl)
+                self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl, [], 'raft-infill')
 
         for slicenum in range(len(self.perimeter_paths)):
             self.thermo.update(slicenum)
@@ -649,19 +735,19 @@ class Slicer(object):
             if self.skirt_paths:
                 paths = geom.close_paths(self.skirt_paths)
                 if layer < self.conf['skirt_layers'] + self.raft_layers:
-                    self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl)
+                    self._add_raw_layer_paths(layer, paths, self.support_width, self.supp_nozl, [], 'skirt')
 
             if slicenum < len(self.support_outline):
                 outline = geom.close_paths(self.support_outline[slicenum])
-                self._add_raw_layer_paths(layer, outline, self.support_width, self.supp_nozl)
-                self._add_raw_layer_paths(layer, self.support_infill[slicenum], self.support_width, self.supp_nozl)
+                self._add_raw_layer_paths(layer, outline, self.support_width, self.supp_nozl, [], 'support')
+                self._add_raw_layer_paths(layer, self.support_infill[slicenum], self.support_width, self.supp_nozl, [], 'support')
 
             for paths in self.perimeter_paths[slicenum]:
                 paths = geom.close_paths(paths)
-                self._add_raw_layer_paths(layer, paths, self.extrusion_width, self.dflt_nozl)
-            self._add_raw_layer_paths(layer, self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl)
+                self._add_raw_layer_paths(layer, paths, self.extrusion_width, self.dflt_nozl, [], 'perimeter')
+            self._add_raw_layer_paths(layer, self.solid_infill[slicenum], self.extrusion_width, self.dflt_nozl, [], 'infill')
 
-            self._add_raw_layer_paths(layer, self.sparse_infill[slicenum], self.infill_width, self.infl_nozl)
+            self._add_raw_layer_paths(layer, self.sparse_infill[slicenum], self.infill_width, self.infl_nozl, [], 'infill')
         self.thermo.clear()
 
     def _slicer_task_gcode(self, filename):
@@ -671,6 +757,12 @@ class Slicer(object):
         with open(filename, "w") as f:
             f.write(";FLAVOR:Marlin\n")
             f.write(";Layer height: {:.2f}\n".format(self.conf['layer_height']))
+            if(self.conf['gcode_comments']):
+               f.write(";generated by {:s} {:s} at {} from \"{:s}\"\n".format(self.NAME,self.VERSION,datetime.datetime.now(),self.args.infile))
+            for k,v in sorted(self.conf.items()): 
+                if type(v) == str:
+                   v = v.replace("\n",'\\n')
+                f.write(";  {:s} = {}\n".format(k,v))
             f.write("M82 ;absolute extrusion mode\n")
             f.write("G21 ;metric values\n")
             f.write("G90 ;absolute positioning\n")
@@ -678,25 +770,55 @@ class Slicer(object):
             if self.conf['bed_temp'] > 0:
                 f.write("M140 S{:d} ;set bed temp\n".format(self.conf['bed_temp']))
                 f.write("M190 S{:d} ;wait for bed temp\n".format(self.conf['bed_temp']))
+
             f.write("M104 S{:d} ;set extruder0 temp\n".format(self.conf['nozzle_0_temp']))
+
+            f.write(";start gcode\n"+self.conf['start_gcode'].replace(r'\n',"\n")+"\n;/start gcode\n")
+            #f.write("G28 X0 Y0 ;auto-home all axes\n")
+            #f.write("G28 Z0 ;auto-home all axes\n")
+            #f.write("G1 Z15 F6000 ;raise extruder\n")
+
             f.write("M109 S{:d} ;wait for extruder0 temp\n".format(self.conf['nozzle_0_temp']))
-            f.write("G28 X0 Y0 ;auto-home all axes\n")
-            f.write("G28 Z0 ;auto-home all axes\n")
-            f.write("G1 Z15 F6000 ;raise extruder\n")
+
             f.write("G92 E0 ;Zero extruder\n")
             f.write("M117 Printing...\n")
             f.write(";LAYER_COUNT:{}\n".format(total_layers))
 
             self.thermo.set_target(total_layers)
-            for layer in range(total_layers):
+            
+            for layer in range(total_layers):                           # -- all paths are indexed by layer & nozzle
                 self.thermo.update(layer)
-                f.write(";LAYER:{}\n".format(layer))
-                for nozl in range(4):
+
+                if(self.conf['gcode_comments']):
+                   f.write(";LAYER:{}\n".format(layer))
+
+                if layer == self.conf['cool_fan_full_layer'] and self.conf['cool_fan_speed_max'] > 0:
+                    f.write("M106 S{:d} ;cool_fan_full_layer\n".format(int(self.conf['cool_fan_speed_max']*255/100)))
+            
+                for nozl in range(self.conf['extruder_count']):         # -- walk through nozzles/extruders
                     if layer in self.raw_layer_paths and self.raw_layer_paths[layer][nozl] != []:
-                        f.write("( Nozzle {} )\n".format(nozl))
-                        for paths, width in self.raw_layer_paths[layer][nozl]:
-                            for line in self._paths_gcode(paths, width, nozl, self.layer_zs[layer]):
+                        f.write(";( Nozzle {} )\n".format(nozl))
+                        for paths, width, typ in self.raw_layer_paths[layer][nozl]:
+                            for line in self._paths_gcode(paths, width, nozl, layer, self.layer_zs[layer], typ):
                                 f.write(line)
+            f.write(";end gcode\n"+self.conf['end_gcode'].replace(r'\n',"\n")+"\n;/end gcode\n")
+            self.thermo.clear()
+
+    def _slicer_task_svg(self, filename):
+        self.thermo.set_target(self.layers)
+        total_layers = self.layers + self.raft_layers
+        self.thermo.set_target(total_layers)
+        for layer in range(total_layers):                           # -- all paths are indexed by layer & nozzle
+            self.thermo.update(layer)
+            with open("{}-{:05d}.svg".format(filename,layer), "w") as f:
+                f.write("<?xml version=\"1.0\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n<svg width=\"{}\" height=\"{}\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n".format(self.conf['bed_size_x'],self.conf['bed_size_y']))
+                # -- FIXME: more work required, dead_paths are cutouts, properly do this SVG compliant
+                for line in self._paths_svg(self.layer_paths[layer], layer, self.layer_zs[layer], 'fill'):
+                    f.write(line)
+                for line in self._paths_svg(self.dead_paths[layer], layer, self.layer_zs[layer], 'hole'):
+                    f.write(line)
+                f.write("</svg>")
+                f.close()
             self.thermo.clear()
 
     ############################################################
@@ -706,7 +828,7 @@ class Slicer(object):
         dist = math.sqrt(sum([float(x)*float(x) for x in delta]))
         return dist
 
-    def _add_raw_layer_paths(self, layer, paths, width, nozl, do_not_cross=[]):
+    def _add_raw_layer_paths(self, layer, paths, width, nozl, do_not_cross=[], typ=''):
         maxdist = 2.0
         joined = []
         if paths:
@@ -741,8 +863,8 @@ class Slicer(object):
                     path = paths.pop(0)
             joined.append(path)
         if layer not in self.raw_layer_paths:
-            self.raw_layer_paths[layer] = [[] for i in range(4)]
-        self.raw_layer_paths[layer][nozl].append( (joined, width) )
+            self.raw_layer_paths[layer] = [[] for i in range(self.conf['extruder_count'])]
+        self.raw_layer_paths[layer][nozl].append( (joined, width, typ) )
 
     def _tool_change_gcode(self, newnozl):
         retract_ext_dist = self.conf['retract_extruder']
@@ -750,14 +872,20 @@ class Slicer(object):
         if self.last_nozl == newnozl:
             return []
         gcode_lines = []
+        gcode_lines.append(";tool change");
         gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=-retract_ext_dist, f=retract_speed*60.0))
         gcode_lines.append("T{t:d}\n".format(t=newnozl))
         gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=retract_ext_dist, f=retract_speed*60.0))
+        gcode_lines.append(";/tool change");
         return gcode_lines
 
-    def _paths_gcode(self, paths, ewidth, nozl, z):
+    def _paths_gcode(self, paths, ewidth, nozl, layer, z, typ='', last=0):
+        if len(paths) <= 0:
+            return []
+            
+        # -- copy some configs into local vars
         fil_diam = self.conf['nozzle_{0:d}_filament'.format(nozl)]
-        nozl_diam = self.conf['nozzle_{0:d}_filament'.format(nozl)]
+        nozl_diam = self.conf['nozzle_{0:d}_diam'.format(nozl)]
         max_speed = self.conf['nozzle_{0:d}_max_speed'.format(nozl)]
         layer_height = self.conf['layer_height']
         retract_dist = self.conf['retract_dist']
@@ -766,42 +894,136 @@ class Slicer(object):
         feed_rate = self.conf['feed_rate']
         travel_rate_xy = self.conf['travel_rate_xy']
         travel_rate_z = self.conf['travel_rate_z']
-        ewidth = nozl_diam * self.extrusion_ratio
-        xsect = math.pi * ewidth/2 * layer_height/2
-        fil_xsect = math.pi * fil_diam/2 * fil_diam/2
+
+        # -- calculating some extrusion factor
+        ewidth = nozl_diam * self.extrusion_ratio           # -- e.g. 0.4 * 1.25 = 0.5
+        min_edist = nozl_diam / 2                           # -- minimal edist based on nozl_diam
+        speedf = 1
+        
+        if layer == 0:                                      # -- make thick first layer and slower
+            ewidth *= 1.25
+            speedf = 0.5
+        elif typ == 'perimeter' and self.conf['shell_speed'] > 0:     # -- perimeters may have their own speed
+            speedf = self.conf['shell_speed'] / max_speed
+            if typ == 'perimeter' and last:                 # -- FIXME: check for last (outer) perimeter/shell
+                speedf = self.conf['external_shell_speed'] / max_speed
+                if self.args.debug:
+                    print("outer perimeter",z,layer,speedf,n,lnp)
+
+        xsect = math.pi * ewidth/2 * layer_height/2         # -- e.g. pi * 0.5/2 * 0.2/2 = 0.0785 = oval cross section
+        fil_xsect = math.pi * fil_diam/2 * fil_diam/2       # -- e.g. pi * 1.75/2 * 1.75/2 = 2.404 = filament cross section
+        xsectf = xsect / fil_xsect
+           
         gcode_lines = []
-        for line in self._tool_change_gcode(nozl):
-            gcode_lines.append(line)
+
+        if self.conf['extruder_count'] > 1:                                   # -- only add if there are multiple extruders
+            for line in self._tool_change_gcode(nozl):
+                gcode_lines.append(line)
+
+        if len(paths) > 0 and self.conf['gcode_comments']:
+            gcode_lines.append(";SPEED:{:.0f}%\n".format(speedf*100))
+            gcode_lines.append(";TYPE:"+typ.upper()+"\n");
+
+        if self.args.debug:
+           print(typ,len(paths),"paths",paths)
+
+        if 0:
+           # -- retract
+           if len(paths) > 0 and (self.last_typ == 'infill' or self.last_typ == 'perimeter') and self.last_typ != typ:
+               if typ != 'infill' and typ != 'perimeter':
+                  self.total_build_time += abs(retract_dist) / retract_speed
+                  self.last_e -= retract_dist
+                  gcode_lines.append("G1 E{e:.3f} F{f:g} ;retract {t:s} ({lt:s})\n".format(e=self.last_e, f=retract_speed*60.0, t=typ, lt=self.last_typ))
+                  self.last_retract_typ = typ
+                  
+           # -- unretract
+           #if len(paths) > 0 and (self.last_typ == 'infill' or self.last_typ == 'perimeter') and self.last_typ != typ and self.last_typ != "":
+           #    if typ == 'infill' or typ != 'perimeter':
+           if len(paths) > 0 and (self.last_typ == 'infill' or self.last_typ == 'perimeter') and self.last_typ != typ and self.last_typ != "":
+               if self.last_retract_typ == 'infill' or self.last_retract_typ != 'perimeter':
+                  self.total_build_time += abs(retract_dist) / retract_speed
+                  self.last_e += retract_dist
+                  gcode_lines.append("G1 E{e:.3f} F{f:g} ;unretract {t:s} ({lt:s})\n".format(e=self.last_e, f=retract_speed*60.0, t=typ, lt=self.last_retract_typ))
+        
+        # -- all paths of single Z layer (z)
         for path in paths:
-            ox, oy = path[0][0:2]
-            if retract_lift > 0 or self.last_pos[2] != z:
+            ox, oy = path[0][0:2]                                           # -- origin coord, z disregarded (comes as argument)
+
+            if retract_lift > 0 or self.last_pos[2] != z:                   # -- reposition Z required?
                 self.total_build_time += abs(retract_lift) / travel_rate_z
                 gcode_lines.append("G1 Z{z:.2f} F{f:g}\n".format(z=z+retract_lift, f=travel_rate_z*60.0))
-            dist = math.hypot(self.last_pos[1]-oy, self.last_pos[0]-ox)
+
+            dist = math.hypot(self.last_pos[1]-oy, self.last_pos[0]-ox)     # -- distance to move (from last pos)
             self.total_build_time += dist / travel_rate_xy
+
+            # -- we move to the beginning of the path (no extrusion yet)
             gcode_lines.append("G0 X{x:.2f} Y{y:.2f} F{f:g}\n".format(x=ox, y=oy, f=travel_rate_xy*60.0))
+
             if retract_lift > 0:
                 self.total_build_time += abs(retract_lift) / travel_rate_z
                 gcode_lines.append("G1 Z{z:.2f} F{f:g}\n".format(z=z, f=travel_rate_z*60.0))
-            if retract_dist > 0:
+
+            if retract_dist > 0: # and typ != 'infill' and typ != 'perimeter':
                 self.total_build_time += abs(retract_dist) / retract_speed
-                gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=self.last_e+retract_dist, f=retract_speed*60.0))
                 self.last_e += retract_dist
-            for x, y in path[1:]:
+                gcode_lines.append("G1 E{e:.3f} F{f:g} ;unretract {t:s}\n".format(e=self.last_e, f=retract_speed*60.0, t=typ))
+
+            for x, y in path[1:]:                               # -- now we process the rest of the path
                 dist = math.hypot(y-oy, x-ox)
-                fil_dist = dist * xsect / fil_xsect
-                speed = min(feed_rate, max_speed) * 60.0
+
+                if dist < min_edist:        # -- this is needed, some models are too detailed, or -M scale=s creates tiny deltas
+                    continue
+
+                fil_dist = dist * xsectf 
+                if self.args.debug:
+                   print("dist",dist,"fil_dist",fil_dist,"last_e",self.last_e)
+
+                speed = min(feed_rate, max_speed) * 60.0 * speedf
+
                 self.total_build_time += dist / feed_rate
-                self.last_e += fil_dist
+                self.last_e += fil_dist 
+
                 gcode_lines.append("G1 X{x:.2f} Y{y:.2f} E{e:.3f} F{f:g}\n".format(x=x, y=y, e=self.last_e, f=speed))
                 self.last_pos = (x, y, z)
                 ox, oy = x, y
-            if retract_dist > 0:
+
+            if retract_dist > 0: # and typ != 'infill' and typ != 'perimeter':
                 self.total_build_time += abs(retract_dist) / retract_speed
-                gcode_lines.append("G1 E{e:.3f} F{f:g}\n".format(e=self.last_e-retract_dist, f=retract_speed*60.0))
                 self.last_e -= retract_dist
+                gcode_lines.append("G1 E{e:.3f} F{f:g} ;retract {t:s}\n".format(e=self.last_e, f=retract_speed*60.0, t=typ))
+            
+        if len(paths) > 0: 
+           self.last_typ = typ
+        
         return gcode_lines
 
+    def _paths_svg(self, paths, layer, z, typ=''):
+        layer_height = self.conf['layer_height']
+        svg_lines = [ ]
+        if 0:
+            for path in paths:
+                points = [ ]
+                for x, y in path:
+                    points.append("{},{}".format(x,y))
+                svg_lines.append("<polygon fill-rule=\"nonzero\" points=\""+" ".join(points)+"\"/>\n")
+        else:
+            svg = ""
+            for path in paths:
+                points = [ ]
+                for x, y in path:
+                    points.append("{},{}".format(x,y))
+                svg = svg + self._svg_path_data(points);
+            if len(svg):
+               svg_lines.append("<path fill-rule=\"evenodd\" d=\""+svg+"\"/>\n")
+            return svg_lines
+
+    def _svg_path_data(self, p):
+        m = []
+        m.append("M {}".format(p[0]))
+        for pt in p[1:]:
+            m.append("L {}".format(pt))
+        return " ".join(m)+" Z"
+            
     ############################################################
 
     def _display_paths(self):
@@ -918,9 +1140,9 @@ class Slicer(object):
         #     ["#700", "#c00", "#f00", "#f77"],
         # ]
         nozl_colors = [ ["#0c0"], ["#aa0"], ["#00c"], ["#c00"] ]
-        for nozl in range(4):
+        for nozl in range(self.conf['extruder_count']):
             if layernum in self.raw_layer_paths and self.raw_layer_paths[layernum][nozl]:
-                for paths, width in self.raw_layer_paths[layernum][nozl]:
+                for paths, width, typ in self.raw_layer_paths[layernum][nozl]:
                     self._draw_line(paths, colors=nozl_colors[nozl], ewidth=width)
         self._draw_line(self.layer_paths[self.layer], colors=["#cc0"], ewidth=self.extrusion_width/8.0)
         self._draw_line(self.dead_paths[self.layer], colors=["red"], ewidth=self.extrusion_width/8.0)

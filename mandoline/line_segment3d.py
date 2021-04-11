@@ -3,7 +3,7 @@ class LineSegment3D(object):
     """A class to represent a 3D line segment."""
 
     def __init__(self, p1, p2):
-        """Initialize with twwo endpoints."""
+        """Initialize with two endpoints."""
         if p1 > p2:
             p1, p2 = (p2, p1)
         self.p1 = p1
@@ -71,6 +71,11 @@ class LineSegment3D(object):
         self.p1 = (self.p1[a] + offset[a] for a in range(3))
         self.p2 = (self.p2[a] + offset[a] for a in range(3))
 
+    def scale(self,scale):
+        """Translate the endpoint's vertices"""
+        self.p1 = (self.p1[a] * scale[a] for a in range(3))
+        self.p2 = (self.p2[a] * scale[a] for a in range(3))
+
     def length(self):
         """Returns the length of the line."""
         return self.p1.distFromPoint(self.p2)
@@ -108,6 +113,12 @@ class LineSegment3DCache(object):
         """Translate vertices of all edges."""
         for v in self.seghash.values():
             v.translate(offset)
+        self.rehash()
+
+    def scale(self,scale):
+        """Scale vertices of all edges."""
+        for v in self.seghash.values():
+            v.scale(scale)
         self.rehash()
 
     def endpoint_segments(self, p):
