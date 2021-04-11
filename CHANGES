@@ -1,3 +1,7 @@
+2021/04/11: 0.8.5: Rene K. Mueller
+  - adding -S shell_speed=..
+  - added Makefile and tests/Makefile and more test models
+  
 2021/04/06: 0.8.4: Rene K. Mueller
   - SVG output: supporting slicing to SVG, using "-o test.svg", very experimental
   - intern: model.scale([x,y,z]) implemented

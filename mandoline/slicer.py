@@ -1140,9 +1140,9 @@ class Slicer(object):
         #     ["#700", "#c00", "#f00", "#f77"],
         # ]
         nozl_colors = [ ["#0c0"], ["#aa0"], ["#00c"], ["#c00"] ]
-        for nozl in range(4):
+        for nozl in range(self.conf['extruder_count']):
             if layernum in self.raw_layer_paths and self.raw_layer_paths[layernum][nozl]:
-                for paths, width in self.raw_layer_paths[layernum][nozl]:
+                for paths, width, typ in self.raw_layer_paths[layernum][nozl]:
                     self._draw_line(paths, colors=nozl_colors[nozl], ewidth=width)
         self._draw_line(self.layer_paths[self.layer], colors=["#cc0"], ewidth=self.extrusion_width/8.0)
         self._draw_line(self.dead_paths[self.layer], colors=["red"], ewidth=self.extrusion_width/8.0)
