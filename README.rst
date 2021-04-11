@@ -75,24 +75,24 @@ and the 'q' key will quit and close the window.  The keys `1` - `4` or
 
 TODO
 ====
-- Fixing non-manifold or general get more linient on models
-  - 3DBenchy fails to slice without `-n`
-  - Voron_Design_Cube_v7 slices wrong as seen with `-g`
-- Allow case-insensitive settings (infill_type, support_type, adhesion_type, bed_geometry)
-- Resolve "shell" vs "wall" vs "perimeter" in source variables, source comments and config
-- Support more import formats, e.g. 3MF
-- Enable multi-model loading/placement/rotation
-  - 0.8.4: -M scale=s or -M scale=x,y,z for single model
-- Verify models fit inside build volume.
-- Interior solid infill perimeter paths
-- Pathing type prioritization
-- Optimize route paths
-- Skip retraction for short motions
-- Smooth top surfacing for non-flat surfaces
-- G-Code custom startup/shutdown/toolchange scripts.
-  - 0.8.3: start_gcode and end_gcode added
-- G-Code flavors
-- G-Code volumetric extrusion
-- Relative E motions.
-- Better Bridging
+* Fixing non-manifold or general get more linient on models
+    * 3DBenchy fails to slice without `-n`
+    * Voron_Design_Cube_v7 slices wrong as seen with `-g`
+* Allow case-insensitive settings (infill_type, support_type, adhesion_type, bed_geometry)
+* Resolve "shell" vs "wall" vs "perimeter" in source variables, source comments and config
+* Support more import formats, e.g. 3MF
+* Enable multi-model loading/placement/rotation
+    * 0.8.4: -M scale=s or -M scale=x,y,z for single model
+* Verify models fit inside build volume.
+* Interior solid infill perimeter paths
+* Pathing type prioritization
+* Optimize route paths
+* Skip retraction for short motions
+* Smooth top surfacing for non-flat surfaces
+* G-Code custom startup/shutdown/toolchange scripts.
+    * 0.8.3: start_gcode and end_gcode added
+* G-Code flavors
+* G-Code volumetric extrusion
+* Relative E motions.
+* Better Bridging
 
