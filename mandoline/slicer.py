@@ -22,6 +22,8 @@ slicer_configs = OrderedDict([
     ('Quality', (
         ('layer_height',      float,  0.2, (0.01, 0.5), "Slice layer height in mm."),
         ('shell_count',       int,      2, (1, 10),     "Number of outer shells to print."),
+        ('shell_speed',       float,    0, (0, 500),    "The shell speed (mm/s)"),
+        # ('outer_shell_speed',  float,   20, (1, 500),    "The outer shell speed (mm/s)"),  
         ('random_starts',     bool,   True, None,       "Enable randomizing of perimeter starts."),
         ('top_layers',        int,      3, (0, 10),     "Number of layers to print on the top side of the object."),
         ('bottom_layers',     int,      3, (0, 10),     "Number of layers to print on the bottom side of the object."),
@@ -181,6 +183,7 @@ class Slicer(object):
 
     def set_config(self, key, valstr):
         key = key.strip()
+        key = key.replace('-','_')
         valstr = valstr.strip()
         if key not in self.conf_metadata:
             print("WARN: Ignoring unknown config option: {}".format(key))
@@ -264,6 +267,7 @@ class Slicer(object):
 
         if key:                                     # -- query
             key = key.strip()
+            key = key.replace('-','_')
             for s, opts in slicer_configs.items():
                 for k in opts:
                     if re.search(key,k[0]):         # -- match partial name match
@@ -298,7 +302,7 @@ class Slicer(object):
     def slice_to_file(self, filename, showgui=False):
         st = time.time()
         
-        print("Slicing @{:.3f}mm layer height".format(self.conf['layer_height']))
+        print("Slicing @ {:.3f}mm layer height".format(self.conf['layer_height']))
         self.dflt_nozl = self.conf['default_nozzle']
         self.infl_nozl = self.conf['infill_nozzle']
         self.supp_nozl = self.conf['support_nozzle']
@@ -340,11 +344,11 @@ class Slicer(object):
         ]
         self.thermo = TextThermometer(self.layers)
 
-        if(self.args.format is not None and self.args.format == 'svg' or re.search(".svg$",filename)):
+        if(self.args.format is not None and self.args.format == 'svg' or re.search(r'\.svg$',filename)):
             print("- Perimeters")
             self._slicer_task_perimeters()
 
-            filename = re.sub(r'.svg$','',filename)
+            filename = re.sub(r'\.svg$','',filename)
             print("- Export {}x SVGs to \"{}-*.svg\"".format(self.layers,filename))
             self._slicer_task_svg(filename)
     
@@ -369,7 +373,7 @@ class Slicer(object):
                'x' if self.conf['skirt_layers']>0 and self.conf['skirt_lines'] > 0 else ' '))
             self._slicer_task_adhesion()
     
-            print("- Infill ({})".format(self.conf['infill_type']))
+            print("- Infill ({} {:.0f}%)".format(self.conf['infill_type'],self.conf['infill_density']))
             self._slicer_task_fill()
     
             print("- Pathing")
@@ -875,7 +879,7 @@ class Slicer(object):
         gcode_lines.append(";/tool change");
         return gcode_lines
 
-    def _paths_gcode(self, paths, ewidth, nozl, layer, z, typ=''):
+    def _paths_gcode(self, paths, ewidth, nozl, layer, z, typ='', last=0):
         if len(paths) <= 0:
             return []
             
@@ -894,9 +898,17 @@ class Slicer(object):
         # -- calculating some extrusion factor
         ewidth = nozl_diam * self.extrusion_ratio           # -- e.g. 0.4 * 1.25 = 0.5
         min_edist = nozl_diam / 2                           # -- minimal edist based on nozl_diam
+        speedf = 1
         
-        if layer == 0:                                      # -- make thick first layer
+        if layer == 0:                                      # -- make thick first layer and slower
             ewidth *= 1.25
+            speedf = 0.5
+        elif typ == 'perimeter' and self.conf['shell_speed'] > 0:     # -- perimeters may have their own speed
+            speedf = self.conf['shell_speed'] / max_speed
+            if typ == 'perimeter' and last:                 # -- FIXME: check for last (outer) perimeter/shell
+                speedf = self.conf['external_shell_speed'] / max_speed
+                if self.args.debug:
+                    print("outer perimeter",z,layer,speedf,n,lnp)
 
         xsect = math.pi * ewidth/2 * layer_height/2         # -- e.g. pi * 0.5/2 * 0.2/2 = 0.0785 = oval cross section
         fil_xsect = math.pi * fil_diam/2 * fil_diam/2       # -- e.g. pi * 1.75/2 * 1.75/2 = 2.404 = filament cross section
@@ -909,6 +921,7 @@ class Slicer(object):
                 gcode_lines.append(line)
 
         if len(paths) > 0 and self.conf['gcode_comments']:
+            gcode_lines.append(";SPEED:{:.0f}%\n".format(speedf*100))
             gcode_lines.append(";TYPE:"+typ.upper()+"\n");
 
         if self.args.debug:
@@ -957,15 +970,19 @@ class Slicer(object):
 
             for x, y in path[1:]:                               # -- now we process the rest of the path
                 dist = math.hypot(y-oy, x-ox)
+
                 if dist < min_edist:        # -- this is needed, some models are too detailed, or -M scale=s creates tiny deltas
                     continue
+
                 fil_dist = dist * xsectf 
                 if self.args.debug:
                    print("dist",dist,"fil_dist",fil_dist,"last_e",self.last_e)
-                speed = min(feed_rate, max_speed) * 60.0
+
+                speed = min(feed_rate, max_speed) * 60.0 * speedf
+
                 self.total_build_time += dist / feed_rate
-                self.last_e += fil_dist
-                #gcode_lines.append(";LINE-TYPE:"+typ+"\n");
+                self.last_e += fil_dist 
+
                 gcode_lines.append("G1 X{x:.2f} Y{y:.2f} E{e:.3f} F{f:g}\n".format(x=x, y=y, e=self.last_e, f=speed))
                 self.last_pos = (x, y, z)
                 ox, oy = x, y
@@ -974,7 +991,7 @@ class Slicer(object):
                 self.total_build_time += abs(retract_dist) / retract_speed
                 self.last_e -= retract_dist
                 gcode_lines.append("G1 E{e:.3f} F{f:g} ;retract {t:s}\n".format(e=self.last_e, f=retract_speed*60.0, t=typ))
-
+            
         if len(paths) > 0: 
            self.last_typ = typ
         

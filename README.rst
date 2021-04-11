@@ -27,7 +27,7 @@ Usage
 To just validate a model, checking it for manifold errors, just run
 ``mandoline`` with the name of the file::
 
-    mandoline test_cube.stl
+    mandoline cube.stl
 
 Any error messages will be printed to ``STDERR``, and the return code
 will be non-zero if errors were found.
@@ -35,11 +35,11 @@ will be non-zero if errors were found.
 To slice a file into GCode, you need to specify the file to write to
 with the -o OUTFILE arguments::
 
-    mandoline -o testcube.gcode testcube.stl
+    mandoline -o cube.gcode cube.stl
 
 If you want to force it to skip validation, then add the -n argument::
 
-    mandoline -o testcube.gcode -n testcube.stl
+    mandoline -o cube.gcode -n cube.stl
 
 Settings
 --------

@@ -4,7 +4,7 @@ import os
 import glob
 from setuptools import setup
 
-VERSION = "0.8.4"          # HINT: also update version in __init__.py
+VERSION = "0.8.5"          # HINT: also update version in __init__.py
 
 def find_data_files(source, target, patterns):
     """
