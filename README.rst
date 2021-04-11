@@ -76,6 +76,8 @@ and the 'q' key will quit and close the window.  The keys `1` - `4` or
 TODO
 ====
 - Fixing non-manifold or general get more linient on models
+  - 3DBenchy fails to slice without `-n`
+  - Voron_Design_Cube_v7 slices wrong as seen with `-g`
 - Allow case-insensitive settings (infill_type, support_type, adhesion_type, bed_geometry)
 - Resolve "shell" vs "wall" vs "perimeter" in source variables, source comments and config
 - Support more import formats, e.g. 3MF
