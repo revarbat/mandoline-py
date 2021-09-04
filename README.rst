@@ -2,10 +2,10 @@
 Mandoline Py
 ############
 
-This is a 3D printing STL-to-GCode slicer, written in Python, based
-on the Clipper geometry library.  It will let you take STL files
-and generate a GCode path file that you can send to your RepRap 3D
-printer to print the object.
+This is a 3D printing 3D Model GCode/SVG slicer, written in Python, based
+on the Clipper geometry library.  It will let you take 3D model files
+like STL, 3MF, OBJ, AMF, OFF, 3MJ and generate a GCode path file that you 
+can send to your RepRap 3D printer to print the object.
 
 
 Installation
@@ -80,19 +80,19 @@ TODO
     * Voron_Design_Cube_v7 slices wrong as seen with `-g`
 * Allow case-insensitive settings (infill_type, support_type, adhesion_type, bed_geometry)
 * Resolve "shell" vs "wall" vs "perimeter" in source variables, source comments and config
-* Support more import formats, e.g. 3MF
+* ~Support more import formats, e.g. 3MF~ done 0.8.6: 3MF, OBJ, OFF, AMF and 3MJ formats added
 * Enable multi-model loading/placement/rotation
     * 0.8.4: -M scale=s or -M scale=x,y,z for single model
-* Verify models fit inside build volume.
+* Verify models fit inside build volume
 * Interior solid infill perimeter paths
 * Pathing type prioritization
 * Optimize route paths
 * Skip retraction for short motions
 * Smooth top surfacing for non-flat surfaces
-* G-Code custom startup/shutdown/toolchange scripts.
+* G-Code custom startup/shutdown/toolchange scripts
     * 0.8.3: start_gcode and end_gcode added
 * G-Code flavors
 * G-Code volumetric extrusion
-* Relative E motions.
+* Relative E motions
 * Better Bridging
 

@@ -179,13 +179,24 @@ class ModelData(object):
         l = fh.readline()
         if not re.search('^OFF',l):
             sys.exit("ERROR: mal-format OFF <{fn}>")
-        (np,nf,ne) = [int(a) for a in fh.readline().split()]        # -- 2nd line has n-points, n-faces, n-edges (ignored)
+        while 1:
+            l = fh.readline().strip()
+            if re.search(r'^\s*#',l): continue
+            if re.search(r'^\s*$',l): continue
+            (np,nf,ne) = [int(a) for a in l.split()]        # -- 2nd line has n-points, n-faces, n-edges (ignored)
+            break
         for i in range(np):
-            ps.append([float(x) for x in fh.readline().split()])
+            l = fh.readline().strip()
+            l = re.sub('#.*','',l)
+            ps.append([float(x) for x in l.split()])
         for i in range(nf):
-            f = [int(x) for x in fh.readline().split()]
-            f.pop(0)
-            self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+            l = fh.readline().strip()
+            l = re.sub('#.*','',l)
+            f = l.split()
+            n = int(f.pop(0))                               # -- line has <n> <i1> .. <iN> [<r> <g> <b>]
+            fs = [int(x) for x in f[:n]]
+            for i in range(n-2):
+               self._add_facet(ps[fs[0]],ps[fs[i+1]],ps[fs[i+2]])
         
     def _read_OBJ(self,fn):                 # -- wavefront .obj
         fh = open(fn,"r")
@@ -212,7 +223,7 @@ class ModelData(object):
             z = zipfile.ZipFile(fn)
             fh = z.open('3D/3dmodel.model','r')
             xm = fh.read()
-            root = defusedxml.ElementTree.fromstring(xm)    # -- going full XML
+            root = defusedxml.ElementTree.fromstring(xm)    # -- decoding from XML source
             #root = root.getroot()                 # -- doesn't work with named spaces (F*CK - it never works)
             ns = root.tag
             ns = re.sub('}(.*)$','}',ns)           # -- XML Crap: we need to retrieve name space, and reference it below
@@ -227,7 +238,7 @@ class ModelData(object):
                   for v in obj[i.attrib['objectid']].iter(f'{ns}triangle'):   # -- compose the mesh (TODO: apply transformations)
                      self._add_facet(*[ps[int(v.attrib[x].strip())] for x in v.attrib])
         else:
-            archive = zipfile.ZipFile(fn)
+            archive = zipfile.ZipFile(fn)          # -- this uses Savitar (python3-savitar) from Ultimaker
             parser = Savitar.ThreeMFParser()
             scene = parser.parse(archive.open("3D/3dmodel.model").read())
             for n in scene.getSceneNodes():
@@ -242,7 +253,7 @@ class ModelData(object):
                     f = struct.unpack_from('3i',fb,i*3*4)
                     self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
 
-    def _read_AMF(self,fn):                 # -- amf (facepalm)
+    def _read_AMF(self,fn):                 # -- amf (obsolete)
         ps = [ ]
         root = defusedxml.ElementTree.parse(fn)
         root = root.getroot()
@@ -253,6 +264,59 @@ class ModelData(object):
                f = [int(x.text.strip()) for x in c]
                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
                
+    def _read_PLY(self,fn):                 # -- ply
+        ps = [ ]
+        fh = open(fn,"rb")
+        hd = fh.readline()                  # 'ply'
+        hd = hd.strip()
+        if hd != b'ply':
+           sys.exit(f"ERROR: PLY format mal-formed <{fn}> (not starting with 'ply'), abort")
+        meta = { }
+        n = 0
+        while 1:
+           l = fh.readline()
+           if not l: break
+           l = l.strip().decode('ascii')
+           #print("=",l)
+           l = re.sub(r'{.+}','',l)                 # -- remove comments
+           if re.search('^end_header',l):
+              break
+           #hs = re.search('(\S+)\s+(\S+)\s+(\S.*)',l)
+           hs = l.split()
+           if hs:
+              #hs.pop(0)
+              if not hs[0] in meta: meta[hs[0]] = [ ]
+              if hs[0] == "comment":
+                  meta[hs[0]].append(" ".join(hs[1:]))
+              elif len(hs) > 1:
+                  meta[hs[0]].append({hs[1]: hs[2:]})
+              else:
+                  meta[hs[0]].append({})
+           n += 1
+        #print(meta)
+        for kv in meta['element']:
+            for k,v in kv.items():
+                if k=='vertex': np = v[0]
+                if k=='face': nf = v[0]
+        fmt = 'ascii' if 'ascii' in meta['format'][0] else 'binary'
+        #print(fmt,np,nf)
+        if fmt=='ascii':
+            for i in range(int(np)):                     # -- fetch points
+                l = fh.readline().decode('ascii')
+                l = re.sub(r'{.+}','',l)                 # -- remove comments
+                ps.append([float(x) for x in l.split()])
+            #print(len(ps),ps)
+            for i in range(int(nf)):                     # -- fetch faces
+                l = fh.readline().decode('ascii')
+                l = re.sub(r'{.+}','',l)                 # -- remove comments
+                fs = [int(x) for x in l.split()]
+                n = fs.pop(0)
+                for i in range(len(fs)-2):
+                   #print(0,i+1,i+2,ps[fs[0]],ps[fs[i+1]],ps[fs[i+2]])
+                   self._add_facet(ps[fs[0]],ps[fs[i+1]],ps[fs[i+2]])
+        else:
+            sys.exit("ERROR: PLY binary format not yet supported (only ascii), abort")
+        
     def read_file(self, filename):
         """Read the model data from the given STL, OBJ, OFF, 3MF, AMF, 3MJ file."""
         self.filename = filename
@@ -290,6 +354,8 @@ class ModelData(object):
            self._read_3MF(filename)
         elif re.search("\.amf",filename):           # -- AMF
            self._read_AMF(filename)
+        elif re.search("\.ply",filename):           # -- PLY
+           self._read_PLY(filename)
         else:
             sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MF, 3MJ, AMF")
 

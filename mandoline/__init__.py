@@ -26,7 +26,7 @@ def main():
     
     parser = argparse.ArgumentParser(prog=APPNAME)
     parser.add_argument('-o', '--outfile',
-                        help='Slices 3D model to GCode or SVGs to file.')
+                        help='Slices 3D model to GCode or SVGs file.')
     parser.add_argument('-n', '--no-validation', action="store_true",
                         help='Skip performing model validation.')
     parser.add_argument('-g', '--gui-display', action="store_true",
