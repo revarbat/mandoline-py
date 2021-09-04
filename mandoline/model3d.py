@@ -62,7 +62,7 @@ class ModelData(object):
         return [float(val) for val in words[argstart:]]
 
     def _read_stl_ascii_vertex(self, f):
-        point = self._read_ascii_line(f, watchwords='vertex')
+        point = self._read_stl_ascii_line(f, watchwords='vertex')
         return self.points.add(*point)
 
     def quantz(self, pt, quanta=1e-3):
@@ -74,13 +74,13 @@ class ModelData(object):
     def _read_stl_ascii_facet(self, f, quanta=1e-3):
         while True:
             try:
-                normal = self._read_ascii_line(f, watchwords='facet normal')
-                self._read_ascii_line(f, watchwords='outer loop')
-                vertex1 = self._read_ascii_vertex(f)
-                vertex2 = self._read_ascii_vertex(f)
-                vertex3 = self._read_ascii_vertex(f)
-                self._read_ascii_line(f, watchwords='endloop')
-                self._read_ascii_line(f, watchwords='endfacet')
+                normal = self._read_stl_ascii_line(f, watchwords='facet normal')
+                self._read_stl_ascii_line(f, watchwords='outer loop')
+                vertex1 = self._read_stl_ascii_vertex(f)
+                vertex2 = self._read_stl_ascii_vertex(f)
+                vertex3 = self._read_stl_ascii_vertex(f)
+                self._read_stl_ascii_line(f, watchwords='endloop')
+                self._read_stl_ascii_line(f, watchwords='endfacet')
                 if quanta > 0.0:
                     vertex1 = self.quantz(vertex1, quanta)
                     vertex2 = self.quantz(vertex2, quanta)
@@ -165,17 +165,17 @@ class ModelData(object):
                  v3 = ps[f[2]]
                  if quanta > 0.0:                   # -- TODO: make quanta/quantz() a method, not part of file-reading
                     v1 = self.quantz(v1, quanta)
-                    v2 = self.quantz(v1, quanta)
-                    v3 = self.quantz(v1, quanta)
+                    v2 = self.quantz(v2, quanta)
+                    v3 = self.quantz(v3, quanta)
                     if v1 == v2 or v2 == v3 or v3 == v1:
                         continue        # zero area facet.  Skip to next facet.
                     vec1 = Vector(v1) - Vector(v2)
                     vec2 = Vector(v3) - Vector(v2)
                     if vec1.angle(vec2) < 1e-8:
                         continue        # zero area facet.  Skip to next facet.
-                 v1 = self.points.add(*ps[f[0]])
-                 v2 = self.points.add(*ps[f[1]])
-                 v3 = self.points.add(*ps[f[2]])
+                 v1 = self.points.add(*v1)
+                 v2 = self.points.add(*v2)
+                 v3 = self.points.add(*v3)
                  self.edges.add(v1,v2)
                  self.edges.add(v2,v3)
                  self.edges.add(v3,v1)
