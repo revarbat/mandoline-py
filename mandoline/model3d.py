@@ -6,6 +6,7 @@ import math
 import time
 import struct
 import json
+import re
 from pyquaternion import Quaternion
 
 from TextThermometer import TextThermometer
@@ -15,18 +16,18 @@ from facet3d import Facet3DCache
 from line_segment3d import LineSegment3DCache
 
 
-class StlEndOfFileException(Exception):
+class ModelEndOfFileException(Exception):
     """Exception class for reaching the end of the STL file while reading."""
     pass
 
 
-class StlMalformedLineException(Exception):
+class ModelMalformedLineException(Exception):
     """Exception class for malformed lines in the STL file being read."""
     pass
 
 
-class StlData(object):
-    """Class to read, write, and validate STL file data."""
+class ModelData(object):
+    """Class to read, write, and validate STL, OBJ, AMF, 3MF, 3MJ file data."""
 
     def __init__(self):
         """Initialize with empty data set."""
@@ -39,25 +40,25 @@ class StlData(object):
         self.hole_edges = []
         self.layer_facets = {}
 
-    def _read_ascii_line(self, f, watchwords=None):
+    def _read_stl_ascii_line(self, f, watchwords=None):
         line = f.readline(1024).decode('utf-8')
         if line == "":
-            raise StlEndOfFileException()
+            raise ModelEndOfFileException()
         words = line.strip(' \t\n\r').lower().split()
         if not words:
             return []
         if words[0] == 'endsolid':
-            raise StlEndOfFileException()
+            raise ModelEndOfFileException()
         argstart = 0
         if watchwords:
             watchwords = watchwords.lower().split()
             argstart = len(watchwords)
             for i in range(argstart):
                 if words[i] != watchwords[i]:
-                    raise StlMalformedLineException()
+                    raise ModelMalformedLineException()
         return [float(val) for val in words[argstart:]]
 
-    def _read_ascii_vertex(self, f):
+    def _read_stl_ascii_vertex(self, f):
         point = self._read_ascii_line(f, watchwords='vertex')
         return self.points.add(*point)
 
@@ -67,7 +68,7 @@ class StlData(object):
         z = math.floor(z / quanta + 0.5) * quanta
         return (x, y, z)
 
-    def _read_ascii_facet(self, f, quanta=1e-3):
+    def _read_stl_ascii_facet(self, f, quanta=1e-3):
         while True:
             try:
                 normal = self._read_ascii_line(f, watchwords='facet normal')
@@ -87,16 +88,16 @@ class StlData(object):
                     vec2 = Vector(vertex3) - Vector(vertex2)
                     if vec1.angle(vec2) < 1e-8:
                         continue  # zero area facet.  Skip to next facet.
-            except StlEndOfFileException:
+            except ModelEndOfFileException:
                 return None
-            except StlMalformedLineException:
+            except ModelMalformedLineException:
                 continue  # Skip to next facet.
             self.edges.add(vertex1, vertex2)
             self.edges.add(vertex2, vertex3)
             self.edges.add(vertex3, vertex1)
             return self.facets.add(vertex1, vertex2, vertex3, normal)
 
-    def _read_binary_facet(self, f, quanta=1e-3):
+    def _read_stl_binary_facet(self, f, quanta=1e-3):
         data = struct.unpack('<3f 3f 3f 3f H', f.read(4*4*3+2))
         normal = data[0:3]
         vertex1 = data[3:6]
@@ -121,30 +122,52 @@ class StlData(object):
         return self.facets.add(v1, v2, v3, normal)
 
     def read_file(self, filename):
-        """Read the model data from the given STL file."""
+        """Read the model data from the given STL, OBJ, OFF, 3MF, 3MJ file."""
         self.filename = filename
         print("Loading model \"{}\"".format(filename))
         file_size = os.path.getsize(filename)
-        with open(filename, 'rb') as f:
-            line = f.readline(80)
-            if line == "":
-                return  # End of file.
-            if line[0:6].lower() == b"solid " and len(line) < 80:
-                # Reading ASCII STL file.
-                thermo = TextThermometer(file_size)
-                while self._read_ascii_facet(f) is not None:
-                    thermo.update(f.tell())
-                thermo.clear()
-            else:
-                # Reading Binary STL file.
-                chunk = f.read(4)
-                facets = struct.unpack('<I', chunk)[0]
-                thermo = TextThermometer(facets)
-                for n in range(facets):
-                    thermo.update(n)
-                    if self._read_binary_facet(f) is None:
-                        pass
-                thermo.clear()
+        if re.search("\.stl",filename): 
+           with open(filename, 'rb') as f:         # -- STL
+               line = f.readline(80)
+               if line == "":
+                   return  # End of file.
+               if line[0:6].lower() == b"solid " and len(line) < 80:
+                   # Reading ASCII STL file.
+                   thermo = TextThermometer(file_size)
+                   while self._read_stl_ascii_facet(f) is not None:
+                       thermo.update(f.tell())
+                   thermo.clear()
+               else:
+                   # Reading Binary STL file.
+                   chunk = f.read(4)
+                   facets = struct.unpack('<I', chunk)[0]
+                   thermo = TextThermometer(facets)
+                   for n in range(facets):
+                       thermo.update(n)
+                       if self._read_stl_binary_facet(f) is None:
+                           pass
+                   thermo.clear()
+
+        elif re.search("\.3mj",filename):           # -- 3MJ
+           fh = open(filename,"rb")
+           data = json.loads(fh.read())
+           if data['format'] and data['format'] == "3MJ/1.0":
+              ps = [v['c'] for v in data['vertices']]
+              print(ps)
+              for f in data['volumes'][0]['triangles']:
+                 f = f['v']
+                 normal = Vector(0,0,0)             # -- create a dummy
+                 v1 = self.points.add(*ps[f[0]])
+                 v2 = self.points.add(*ps[f[1]])
+                 v3 = self.points.add(*ps[f[2]])
+                 self.edges.add(v1,v2)
+                 self.edges.add(v2,v3)
+                 self.edges.add(v3,v1)
+                 self.facets.add(v1,v2,v3,normal)
+           else:
+              sys.exit(f"ERR: 3MJ file-format mal-formed: <%s>", filename)
+        else:
+            sys.exit(f"ERR: file-format not supported to import <%s>", filename)
 
     def _write_ascii_file(self, filename):
         with open(filename, 'wb') as f:
@@ -168,7 +191,7 @@ class StlData(object):
                 )
             f.write(b"endsolid Model\n")
 
-    def _write_binary_file(self, filename):
+    def _write_stl_binary_file(self, filename):
         with open(filename, 'wb') as f:
             f.write('{0:-80s}'.format('Binary STL Model'))
             f.write(struct.pack('<I', len(self.facets)))
@@ -183,12 +206,17 @@ class StlData(object):
                 ))
 
     def write_file(self, filename, binary=False):
-        """Write the model data to an STL file."""
-        if binary:
-            self._write_binary_file(filename)
+        """Write the model data to an STL, OFF, OBJ, 3MF, 3MJ file."""
+        if filename.search("\.stl$",filename):
+           if binary:
+               self._write_binary_file(filename)
+           else:
+               self._write_ascii_file(filename)
+        elif filename.search("\.3mj$",filename):
+            self._write_3mj(filename)
         else:
-            self._write_ascii_file(filename)
-
+            sys.exit(f"ERR: file-format not supported to export <%s>", filename)
+            
     def _check_manifold_duplicate_faces(self):
         return [facet for facet in self.facets if facet.count != 1]
 
@@ -323,3 +351,4 @@ class StlData(object):
 
 
 # vim: expandtab tabstop=4 shiftwidth=4 softtabstop=4 nowrap
+

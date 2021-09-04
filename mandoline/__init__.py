@@ -17,7 +17,8 @@ import argparse
 if(__name__!="__main__"):
     sys.path.insert(0,abspath(dirname(__file__)))         # -- needed when installed, if running locally (without build/install) all works fine
 
-from stl_data import StlData
+#from stl_data import StlData
+from model3d import ModelData
 from slicer import Slicer
 
 def main():
@@ -80,10 +81,10 @@ def main():
         if not os.path.isfile(args.infile):
             print("ERROR: model file \"{}\" not found, abort.".format(args.infile))
             sys.exit(-1)
-        if re.search(r'.stl$',args.infile):
-            model = StlData() 
+        if re.search(r'.(stl|3mj)$',args.infile):
+            model = ModelData() 
         else:
-            print("ERROR: only STL format supported, abort.")
+            print("ERROR: only STL & 3MJ format supported, abort.")
             sys.exit(-1)
         model.read_file(args.infile)
         model.debug = args.debug
