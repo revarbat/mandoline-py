@@ -182,9 +182,9 @@ class ModelData(object):
                  self.edges.add(v3,v1)
                  self.facets.add(v1,v2,v3,normal)
            else:
-              sys.exit(f"ERR: 3MJ file-format mal-formed: <%s>", filename)
+              sys.exit(f"ERROR: 3MJ file-format mal-formed: <{filename}>")
         else:
-            sys.exit(f"ERR: file-format not supported to import <%s>", filename)
+            sys.exit(f"ERR: file-format not supported to import <{filename}>")
 
     def _write_stl_ascii_file(self, filename):
         with open(filename, 'wb') as f:

@@ -26,7 +26,7 @@ def main():
     
     parser = argparse.ArgumentParser(prog=APPNAME)
     parser.add_argument('-o', '--outfile',
-                        help='Slices model (STL) and write GCode or SVGs to file.')
+                        help='Slices model (STL, 3MJ) and write GCode or SVGs to file.')
     parser.add_argument('-n', '--no-validation', action="store_true",
                         help='Skip performing model validation.')
     parser.add_argument('-g', '--gui-display', action="store_true",
@@ -84,7 +84,7 @@ def main():
         if re.search(r'.(stl|3mj)$',args.infile):
             model = ModelData() 
         else:
-            print("ERROR: only STL & 3MJ format supported, abort.")
+            print(f"ERROR: only STL & 3MJ format supported <{args.infile}>, abort.")
             sys.exit(-1)
         model.read_file(args.infile)
         model.debug = args.debug
