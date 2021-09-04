@@ -4,7 +4,7 @@
 
 NAME = 'Mandoline Py'
 APPNAME = 'mandoline'
-VERSION = '0.8.5'                       # HINT: keep version consistent also in ../setup.py
+VERSION = '0.8.6'                       # HINT: keep version consistent also in ../setup.py
     
 import re
 import sys

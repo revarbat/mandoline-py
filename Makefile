@@ -1,5 +1,5 @@
 APPNAME = mandoline-py
-VERSION = 0.8.5
+VERSION = 0.8.6
 
 all::
 	@echo "make build install deinstall tests clean"
