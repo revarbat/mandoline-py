@@ -6,7 +6,7 @@ all::
 	@echo "HINT: if you like to code on the base, run 'python3 mandoline/__init__.py' after running build at least once"
 
 build::
-	sudo apt install python3-savitar
+	#sudo apt install python3-savitar
 	python3 setup.py build
 
 install::

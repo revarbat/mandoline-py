@@ -14,7 +14,7 @@ import re
 
 import gzip                         # for compressed .3mj
 import zipfile                      # for .3mf
-import Savitar                      # parsing .3mf
+#import Savitar                      # parsing .3mf
 import numpy                        # for .3mf
 import defusedxml.ElementTree       # for .amf (and maybe .3mf as well)
 
@@ -166,9 +166,10 @@ class ModelData(object):
         data = json.loads(fh.read())
         if data['format'] and data['format'] == "3MJ/1.0":
             ps = [v['c'] for v in data['vertices']]
-            for f in data['volumes'][0]['triangles']:
-                f = f['v']
-                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+            for v in data['volumes']:       # -- FUTURE: extract material/color per volume
+                for f in v['triangles']:
+                    f = f['v']
+                    self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
         else:
             sys.exit(f"ERROR: 3MJ file-format mal-formed: <{fn}>")
 
@@ -206,21 +207,40 @@ class ModelData(object):
             else:
                 """we ignore anything else silently"""
                 
-    def _read_3MF(self,fn):                 # -- 3mf (what a pain to parse, but thanks to python3-savitar just a few lines)
-        archive = zipfile.ZipFile(fn)
-        parser = Savitar.ThreeMFParser()
-        scene = parser.parse(archive.open("3D/3dmodel.model").read())
-        for n in scene.getSceneNodes():
-            mesh = n.getMeshData()
-            vb = mesh.getVerticesAsBytes()
-            fb = mesh.getFacesAsBytes()
+    def _read_3MF(self,fn):                 # -- 3mf (what a pain to parse)
+        if 1:
+            z = zipfile.ZipFile(fn)
+            fh = z.open('3D/3dmodel.model','r')
+            xm = fh.read()
+            root = defusedxml.ElementTree.fromstring(xm)    # -- going full XML
+            #root = root.getroot()                 # -- doesn't work with named spaces (F*CK - it never works)
+            ns = root.tag
+            ns = re.sub('}(.*)$','}',ns)           # -- XML Crap: we need to retrieve name space, and reference it below
+            obj = { }
             ps = [ ]
-            for i in range(int(len(vb)/12)):            # -- we extract 3 floats (each 4 bytes) => 1 vertice/point
-                v = struct.unpack_from('3f',vb,i*3*4)
-                ps.append(v)
-            for i in range(int(len(fb)/12)):            # -- we extract 3 indices (each 4 bytes) => 1 face
-                f = struct.unpack_from('3i',fb,i*3*4)
-                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+            for o in root.iter(f'{ns}object'):     # -- fetch vertices from all objects
+               obj[o.attrib['id']] = o             # -- reference it for later use below
+               for v in o.iter(f'{ns}vertex'):
+                  ps.append([float(v.attrib[x].strip()) for x in v.attrib])
+            for b in root.iter(f'{ns}build'):      # -- for each builds
+               for i in b.iter(f'{ns}item'):       # -- which item
+                  for v in obj[i.attrib['objectid']].iter(f'{ns}triangle'):   # -- compose the mesh (TODO: apply transformations)
+                     self._add_facet(*[ps[int(v.attrib[x].strip())] for x in v.attrib])
+        else:
+            archive = zipfile.ZipFile(fn)
+            parser = Savitar.ThreeMFParser()
+            scene = parser.parse(archive.open("3D/3dmodel.model").read())
+            for n in scene.getSceneNodes():
+                mesh = n.getMeshData()
+                vb = mesh.getVerticesAsBytes()
+                fb = mesh.getFacesAsBytes()
+                ps = [ ]
+                for i in range(int(len(vb)/12)):            # -- we extract 3 floats (each 4 bytes) => 1 vertice/point
+                    v = struct.unpack_from('3f',vb,i*3*4)
+                    ps.append(v)
+                for i in range(int(len(fb)/12)):            # -- we extract 3 indices (each 4 bytes) => 1 face
+                    f = struct.unpack_from('3i',fb,i*3*4)
+                    self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
 
     def _read_AMF(self,fn):                 # -- amf (facepalm)
         ps = [ ]
@@ -234,7 +254,7 @@ class ModelData(object):
                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
                
     def read_file(self, filename):
-        """Read the model data from the given STL, OBJ, OFF, 3MF, 3MJ file."""
+        """Read the model data from the given STL, OBJ, OFF, 3MF, AMF, 3MJ file."""
         self.filename = filename
         print("Loading model \"{}\"".format(filename))
         file_size = os.path.getsize(filename)

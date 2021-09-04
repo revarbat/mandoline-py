@@ -26,7 +26,7 @@ def main():
     
     parser = argparse.ArgumentParser(prog=APPNAME)
     parser.add_argument('-o', '--outfile',
-                        help='Slices 3D model (STL, OFF, OBJ, 3MF, 3MJ, ...) and write GCode or SVGs to file.')
+                        help='Slices 3D model to GCode or SVGs to file.')
     parser.add_argument('-n', '--no-validation', action="store_true",
                         help='Skip performing model validation.')
     parser.add_argument('-g', '--gui-display', action="store_true",
@@ -70,7 +70,7 @@ def main():
                         help='Display help for all slicing options.')
     parser.add_argument('--show-configs', action="store_true",
                         help='Display values of all slicing options.')
-    parser.add_argument('infile', nargs="?", help='Input 3D model filename (STL, OBJ, OFF, 3MF, 3MJ etc).')
+    parser.add_argument('infile', nargs="?", help='Input 3D model filename (STL, OBJ, OFF, 3MF, AMF, 3MJ).')
     args = parser.parse_args()
 
     if args.verbose:
