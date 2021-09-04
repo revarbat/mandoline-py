@@ -11,10 +11,13 @@ import time
 import struct
 import json
 import re
-import gzip         # for compressed .3mj
-import zipfile      # for .3mf
-import Savitar      # parsing .3mf
-import numpy        # for .3mf
+
+import gzip                         # for compressed .3mj
+import zipfile                      # for .3mf
+import Savitar                      # parsing .3mf
+import numpy                        # for .3mf
+import defusedxml.ElementTree       # for .amf (and maybe .3mf as well)
+
 from pyquaternion import Quaternion
 
 from TextThermometer import TextThermometer
@@ -211,16 +214,25 @@ class ModelData(object):
             mesh = n.getMeshData()
             vb = mesh.getVerticesAsBytes()
             fb = mesh.getFacesAsBytes()
-            #print(len(vb),len(fb))
-            #print(len(vb)/12,len(fb)/12)
             ps = [ ]
-            for i in range(int(len(vb)/12)):            # -- we extract 3 floats => 1 vertice/point
+            for i in range(int(len(vb)/12)):            # -- we extract 3 floats (each 4 bytes) => 1 vertice/point
                 v = struct.unpack_from('3f',vb,i*3*4)
                 ps.append(v)
-            for i in range(int(len(fb)/12)):
+            for i in range(int(len(fb)/12)):            # -- we extract 3 indices (each 4 bytes) => 1 face
                 f = struct.unpack_from('3i',fb,i*3*4)
                 self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
-    
+
+    def _read_AMF(self,fn):                 # -- amf (facepalm)
+        ps = [ ]
+        root = defusedxml.ElementTree.parse(fn)
+        root = root.getroot()
+        for v in root.iter('vertex'):
+            ps.append([float(x.text.strip()) for x in v[0]])
+        for v in root.iter('volume'):
+           for c in v.iter('triangle'):
+               f = [int(x.text.strip()) for x in c]
+               self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+               
     def read_file(self, filename):
         """Read the model data from the given STL, OBJ, OFF, 3MF, 3MJ file."""
         self.filename = filename
@@ -256,8 +268,10 @@ class ModelData(object):
            self._read_OBJ(filename)
         elif re.search("\.3mf",filename):           # -- 3MF
            self._read_3MF(filename)
+        elif re.search("\.amf",filename):           # -- AMF
+           self._read_AMF(filename)
         else:
-            sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MJ")
+            sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MF, 3MJ, AMF")
 
     def _write_stl_ascii_file(self, filename):
         with open(filename, 'wb') as f:
