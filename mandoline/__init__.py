@@ -26,7 +26,7 @@ def main():
     
     parser = argparse.ArgumentParser(prog=APPNAME)
     parser.add_argument('-o', '--outfile',
-                        help='Slices model (STL, 3MJ) and write GCode or SVGs to file.')
+                        help='Slices 3D model (STL, OFF, OBJ, 3MF, 3MJ, ...) and write GCode or SVGs to file.')
     parser.add_argument('-n', '--no-validation', action="store_true",
                         help='Skip performing model validation.')
     parser.add_argument('-g', '--gui-display', action="store_true",
@@ -70,7 +70,7 @@ def main():
                         help='Display help for all slicing options.')
     parser.add_argument('--show-configs', action="store_true",
                         help='Display values of all slicing options.')
-    parser.add_argument('infile', nargs="?", help='Input model filename (STL).')
+    parser.add_argument('infile', nargs="?", help='Input 3D model filename (STL, OBJ, OFF, 3MF, 3MJ etc).')
     args = parser.parse_args()
 
     if args.verbose:
@@ -81,11 +81,7 @@ def main():
         if not os.path.isfile(args.infile):
             print("ERROR: model file \"{}\" not found, abort.".format(args.infile))
             sys.exit(-1)
-        if re.search(r'.(stl|3mj)$',args.infile):
-            model = ModelData() 
-        else:
-            print(f"ERROR: only STL & 3MJ format supported <{args.infile}>, abort.")
-            sys.exit(-1)
+        model = ModelData()
         model.read_file(args.infile)
         model.debug = args.debug
         if model.points.minz > 0 or model.points.minz < 0:    # -- make sure it sits perfectly on Z=0

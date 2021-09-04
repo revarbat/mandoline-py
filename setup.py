@@ -40,7 +40,7 @@ with open('README.rst') as f:
 setup(
     name='mandoline-py',
     version=VERSION,
-    description='An STL to GCode slicer for 3D printing, using the clipper libraries.',
+    description='An STL, OBJ, OFF, 3MF, 3MJ to GCode slicer for 3D printing, using the clipper libraries.',
     long_description=LONG_DESCR,
     author='Revar Desmera',
     author_email='revarbat@gmail.com',

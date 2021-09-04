@@ -1,5 +1,6 @@
 # History:
-# 2021/09/04: renamed stl_data.py to model3d.py to reflect broader functionality to support more than just STL
+# 2021/09/04: supporting 3MF, OFF, Wavefront OBJ and compressed 3MJ too
+# 2021/09/04: renamed stl_data.py to model3d.py to reflect broader functionality to support more than just stl, first new format uncompressed 3MJ
 
 from __future__ import print_function
 
@@ -10,6 +11,10 @@ import time
 import struct
 import json
 import re
+import gzip         # for compressed .3mj
+import zipfile      # for .3mf
+import Savitar      # parsing .3mf
+import numpy        # for .3mf
 from pyquaternion import Quaternion
 
 from TextThermometer import TextThermometer
@@ -18,7 +23,9 @@ from vector import Vector
 from facet3d import Facet3DCache
 from line_segment3d import LineSegment3DCache
 
-
+def list_methods(obj):
+   return [method_name for method_name in dir(obj) if callable(getattr(obj, method_name))]
+   
 class ModelEndOfFileException(Exception):
     """Exception class for reaching the end of the STL file while reading."""
     pass
@@ -70,6 +77,27 @@ class ModelData(object):
         x, y, z = pt
         z = math.floor(z / quanta + 0.5) * quanta
         return (x, y, z)
+
+    def _add_facet(self,v1,v2,v3,quanta=1e-3):
+       normal = Vector(0,0,0)             # -- create a dummy
+       #print(v1,v2,v3)
+       if quanta > 0.0:                   
+          v1 = self.quantz(v1, quanta)
+          v2 = self.quantz(v2, quanta)
+          v3 = self.quantz(v3, quanta)
+          if v1 == v2 or v2 == v3 or v3 == v1:
+              return        # zero area facet.  Skip to next facet.
+          vec1 = Vector(v1) - Vector(v2)
+          vec2 = Vector(v3) - Vector(v2)
+          if vec1.angle(vec2) < 1e-8:
+              return        # zero area facet.  Skip to next facet.
+       v1 = self.points.add(*v1)
+       v2 = self.points.add(*v2)
+       v3 = self.points.add(*v3)
+       self.edges.add(v1,v2)
+       self.edges.add(v2,v3)
+       self.edges.add(v3,v1)
+       self.facets.add(v1,v2,v3,normal)
 
     def _read_stl_ascii_facet(self, f, quanta=1e-3):
         while True:
@@ -124,6 +152,75 @@ class ModelData(object):
         self.edges.add(v3, v1)
         return self.facets.add(v1, v2, v3, normal)
 
+    def _read_3MJ(self,fn):
+        fh = open(fn,"rb")
+        magic = fh.read(10)
+        fh.close()
+        if re.search(b'^\{',magic):         # -- uncompressed
+           fh = open(fn,'r')
+        else: 
+           fh = gzip.open(fn,'rb')
+        data = json.loads(fh.read())
+        if data['format'] and data['format'] == "3MJ/1.0":
+            ps = [v['c'] for v in data['vertices']]
+            for f in data['volumes'][0]['triangles']:
+                f = f['v']
+                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+        else:
+            sys.exit(f"ERROR: 3MJ file-format mal-formed: <{fn}>")
+
+    def _read_OFF(self,fn):                 # -- .off 
+        fh = open(fn,"r")
+        ps = []
+        l = fh.readline()
+        if not re.search('^OFF',l):
+            sys.exit("ERROR: mal-format OFF <{fn}>")
+        (np,nf,ne) = [int(a) for a in fh.readline().split()]        # -- 2nd line has n-points, n-faces, n-edges (ignored)
+        for i in range(np):
+            ps.append([float(x) for x in fh.readline().split()])
+        for i in range(nf):
+            f = [int(x) for x in fh.readline().split()]
+            f.pop(0)
+            self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+        
+    def _read_OBJ(self,fn):                 # -- wavefront .obj
+        fh = open(fn,"r")
+        ps = []
+        while 1:
+            l = fh.readline()                               # -- we parse line-wise
+            if not l:
+                break
+            if re.search('^v ',l):                          # -- v <x> <y> <z> (coordinate)
+                vs = l.split()
+                vs.pop(0)
+                ps.append([float(x) for x in vs])
+            elif re.search('^f ',l):                        # -- f <i0> <i1> <i2> (face)
+                fs = l.split()
+                fs.pop(0)
+                fs = [re.sub('/.*','',x) for x in fs]       # -- remove all /...
+                f = [int(x)-1 for x in fs]                  # -- indices start with 1 => start with 0
+                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+            else:
+                """we ignore anything else silently"""
+                
+    def _read_3MF(self,fn):                 # -- 3mf (what a pain to parse, but thanks to python3-savitar just a few lines)
+        archive = zipfile.ZipFile(fn)
+        parser = Savitar.ThreeMFParser()
+        scene = parser.parse(archive.open("3D/3dmodel.model").read())
+        for n in scene.getSceneNodes():
+            mesh = n.getMeshData()
+            vb = mesh.getVerticesAsBytes()
+            fb = mesh.getFacesAsBytes()
+            #print(len(vb),len(fb))
+            #print(len(vb)/12,len(fb)/12)
+            ps = [ ]
+            for i in range(int(len(vb)/12)):            # -- we extract 3 floats => 1 vertice/point
+                v = struct.unpack_from('3f',vb,i*3*4)
+                ps.append(v)
+            for i in range(int(len(fb)/12)):
+                f = struct.unpack_from('3i',fb,i*3*4)
+                self._add_facet(ps[f[0]],ps[f[1]],ps[f[2]])
+    
     def read_file(self, filename):
         """Read the model data from the given STL, OBJ, OFF, 3MF, 3MJ file."""
         self.filename = filename
@@ -150,40 +247,17 @@ class ModelData(object):
                        if self._read_stl_binary_facet(f) is None:
                            pass
                    thermo.clear()
-
+    
         elif re.search("\.3mj",filename):           # -- 3MJ
-           quanta = 1e-3
-           fh = open(filename,"rb")
-           data = json.loads(fh.read())
-           if data['format'] and data['format'] == "3MJ/1.0":
-              ps = [v['c'] for v in data['vertices']]
-              for f in data['volumes'][0]['triangles']:
-                 f = f['v']
-                 normal = Vector(0,0,0)             # -- create a dummy
-                 v1 = ps[f[0]]
-                 v2 = ps[f[1]]
-                 v3 = ps[f[2]]
-                 if quanta > 0.0:                   # -- TODO: make quanta/quantz() a method, not part of file-reading
-                    v1 = self.quantz(v1, quanta)
-                    v2 = self.quantz(v2, quanta)
-                    v3 = self.quantz(v3, quanta)
-                    if v1 == v2 or v2 == v3 or v3 == v1:
-                        continue        # zero area facet.  Skip to next facet.
-                    vec1 = Vector(v1) - Vector(v2)
-                    vec2 = Vector(v3) - Vector(v2)
-                    if vec1.angle(vec2) < 1e-8:
-                        continue        # zero area facet.  Skip to next facet.
-                 v1 = self.points.add(*v1)
-                 v2 = self.points.add(*v2)
-                 v3 = self.points.add(*v3)
-                 self.edges.add(v1,v2)
-                 self.edges.add(v2,v3)
-                 self.edges.add(v3,v1)
-                 self.facets.add(v1,v2,v3,normal)
-           else:
-              sys.exit(f"ERROR: 3MJ file-format mal-formed: <{filename}>")
+           self._read_3MJ(filename)
+        elif re.search("\.off",filename):           # -- OFF
+           self._read_OFF(filename)
+        elif re.search("\.obj",filename):           # -- OBJ
+           self._read_OBJ(filename)
+        elif re.search("\.3mf",filename):           # -- 3MF
+           self._read_3MF(filename)
         else:
-            sys.exit(f"ERR: file-format not supported to import <{filename}>")
+            sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MJ")
 
     def _write_stl_ascii_file(self, filename):
         with open(filename, 'wb') as f:
