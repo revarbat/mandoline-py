@@ -1,3 +1,6 @@
+# History:
+# 2021/09/04: renamed stl_data.py to model3d.py to reflect broader functionality to support more than just STL
+
 from __future__ import print_function
 
 import os.path
@@ -149,6 +152,7 @@ class ModelData(object):
                    thermo.clear()
 
         elif re.search("\.3mj",filename):           # -- 3MJ
+           quanta = 1e-3
            fh = open(filename,"rb")
            data = json.loads(fh.read())
            if data['format'] and data['format'] == "3MJ/1.0":
@@ -157,6 +161,19 @@ class ModelData(object):
               for f in data['volumes'][0]['triangles']:
                  f = f['v']
                  normal = Vector(0,0,0)             # -- create a dummy
+                 v1 = ps[f[0]]
+                 v2 = ps[f[1]]
+                 v3 = ps[f[2]]
+                 if quanta > 0.0:                   # -- TODO: make quanta/quantz() a method, not part of file-reading
+                    v1 = self.quantz(v1, quanta)
+                    v2 = self.quantz(v1, quanta)
+                    v3 = self.quantz(v1, quanta)
+                    if v1 == v2 or v2 == v3 or v3 == v1:
+                        continue        # zero area facet.  Skip to next facet.
+                    vec1 = Vector(v1) - Vector(v2)
+                    vec2 = Vector(v3) - Vector(v2)
+                    if vec1.angle(vec2) < 1e-8:
+                        continue        # zero area facet.  Skip to next facet.
                  v1 = self.points.add(*ps[f[0]])
                  v2 = self.points.add(*ps[f[1]])
                  v3 = self.points.add(*ps[f[2]])
@@ -169,7 +186,7 @@ class ModelData(object):
         else:
             sys.exit(f"ERR: file-format not supported to import <%s>", filename)
 
-    def _write_ascii_file(self, filename):
+    def _write_stl_ascii_file(self, filename):
         with open(filename, 'wb') as f:
             f.write(b"solid Model\n")
             for facet in self.facets.sorted():
@@ -209,9 +226,9 @@ class ModelData(object):
         """Write the model data to an STL, OFF, OBJ, 3MF, 3MJ file."""
         if filename.search("\.stl$",filename):
            if binary:
-               self._write_binary_file(filename)
+               self._write_stl_binary_file(filename)
            else:
-               self._write_ascii_file(filename)
+               self._write_stl_ascii_file(filename)
         elif filename.search("\.3mj$",filename):
             self._write_3mj(filename)
         else:
