@@ -157,7 +157,6 @@ class ModelData(object):
            data = json.loads(fh.read())
            if data['format'] and data['format'] == "3MJ/1.0":
               ps = [v['c'] for v in data['vertices']]
-              print(ps)
               for f in data['volumes'][0]['triangles']:
                  f = f['v']
                  normal = Vector(0,0,0)             # -- create a dummy
