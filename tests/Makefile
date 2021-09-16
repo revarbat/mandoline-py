@@ -1,4 +1,4 @@
-all::	cube.gcode sphere.gcode cube.off.gcode cube.obj.gcode cube.ply.gcode cube.3mf.gcode cube.3mj.gcode \
+all::	cube.gcode sphere.gcode cube.off.gcode cube.obj.gcode cube.ply.gcode cube.3mf.gcode cube.3mfm.gcode cube.3mj.gcode \
    3DBenchy.gcode Voron_Design_Cube_v7.gcode xyzHollowCalibrationCubeV2.gcode 
 
 clean::
@@ -20,6 +20,9 @@ cube.ply.gcode:	cube.ply
 	/usr/bin/python3 ../mandoline/__init__.py -o "$<.gcode" $< 
 
 cube.3mf.gcode:	cube.3mf
+	/usr/bin/python3 ../mandoline/__init__.py -o "$<.gcode" $< 
+
+cube.3mfm.gcode:	cube.3mfm
 	/usr/bin/python3 ../mandoline/__init__.py -o "$<.gcode" $< 
 
 cube.3mj.gcode:	cube.3mj

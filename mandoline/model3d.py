@@ -220,8 +220,11 @@ class ModelData(object):
                 
     def _read_3MF(self,fn):                 # -- 3mf (what a pain to parse)
         if 1:
-            z = zipfile.ZipFile(fn)
-            fh = z.open('3D/3dmodel.model','r')
+            if re.search(r'\.3mf$',fn):
+               z = zipfile.ZipFile(fn)
+               fh = z.open('3D/3dmodel.model','r')
+            else:                                  # -- we support .3mfm too
+               fh = open(fn,'r')
             xm = fh.read()
             root = defusedxml.ElementTree.fromstring(xm)    # -- decoding from XML source
             #root = root.getroot()                 # -- doesn't work with named spaces (F*CK - it never works)
@@ -322,7 +325,12 @@ class ModelData(object):
         self.filename = filename
         print("Loading model \"{}\"".format(filename))
         file_size = os.path.getsize(filename)
-        if re.search("\.stl",filename): 
+        ext = re.search(r'\.(\w+)$',filename)
+        if ext and ext[1]:
+           ext = ext[1].lower()
+        else:
+          sys.exit(f"ERROR: could not extract file extension to determine file-format <{filename}>, abort")
+        if ext == "stl": 
            with open(filename, 'rb') as f:         # -- STL
                line = f.readline(80)
                if line == "":
@@ -344,20 +352,20 @@ class ModelData(object):
                            pass
                    thermo.clear()
     
-        elif re.search("\.3mj",filename):           # -- 3MJ
+        elif ext == "3mj":           # -- 3MJ
            self._read_3MJ(filename)
-        elif re.search("\.off",filename):           # -- OFF
+        elif ext == "off":           # -- OFF
            self._read_OFF(filename)
-        elif re.search("\.obj",filename):           # -- OBJ
+        elif ext == "obj":           # -- OBJ
            self._read_OBJ(filename)
-        elif re.search("\.3mf",filename):           # -- 3MF
+        elif ext == "3mf" or ext=="3mfm":  # -- 3MF/3MFM
            self._read_3MF(filename)
-        elif re.search("\.amf",filename):           # -- AMF
+        elif ext == "amf":           # -- AMF
            self._read_AMF(filename)
-        elif re.search("\.ply",filename):           # -- PLY
+        elif ext == "ply":           # -- PLY
            self._read_PLY(filename)
         else:
-            sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MF, 3MJ, AMF")
+            sys.exit(f"ERROR: file-format not supported to import <{filename}>, only STL, OBJ, OFF, 3MF/3MFM, 3MJ, AMF")
 
     def _write_stl_ascii_file(self, filename):
         with open(filename, 'wb') as f:
@@ -397,12 +405,12 @@ class ModelData(object):
 
     def write_file(self, filename, binary=False):
         """Write the model data to an STL, OFF, OBJ, 3MF, 3MJ file."""
-        if filename.search("\.stl$",filename):
+        if filename.search("\.stl$",filename,re.IGNORECASE):
            if binary:
                self._write_stl_binary_file(filename)
            else:
                self._write_stl_ascii_file(filename)
-        elif filename.search("\.3mj$",filename):
+        elif filename.search("\.3mj$",filename,re.IGNORECASE):
             self._write_3mj(filename)
         else:
             sys.exit(f"ERR: file-format not supported to export <%s>", filename)
