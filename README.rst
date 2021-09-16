@@ -96,3 +96,7 @@ TODO
 * Relative E motions
 * Better Bridging
 
+See Also
+====
+https://xyzdims.com/2021/09/16/mandoline-slicer/
+
