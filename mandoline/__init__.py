@@ -22,7 +22,7 @@ from model3d import ModelData
 from slicer import Slicer
 
 def main():
-    print("== {} {} == https://github.com/{Spiritdude,revarbat}/mandoline-py".format(NAME,VERSION))
+    print("== {} {} == https://github.com/(Spiritdude|revarbat)/mandoline-py".format(NAME,VERSION))
     
     parser = argparse.ArgumentParser(prog=APPNAME)
     parser.add_argument('-o', '--outfile',
