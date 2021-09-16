@@ -80,7 +80,7 @@ TODO
     * Voron_Design_Cube_v7 slices wrong as seen with `-g`
 * Allow case-insensitive settings (infill_type, support_type, adhesion_type, bed_geometry)
 * Resolve "shell" vs "wall" vs "perimeter" in source variables, source comments and config
-* ~Support more import formats, e.g. 3MF~ done 0.8.6: 3MF, OBJ, OFF, AMF and 3MJ formats added
+* ~~Support more import formats, e.g. 3MF~~ done 0.8.6: 3MF, OBJ, OFF, AMF and 3MJ formats added
 * Enable multi-model loading/placement/rotation
     * 0.8.4: -M scale=s or -M scale=x,y,z for single model
 * Verify models fit inside build volume
