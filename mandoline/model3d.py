@@ -227,9 +227,9 @@ class ModelData(object):
                fh = open(fn,'r')
             xm = fh.read()
             root = defusedxml.ElementTree.fromstring(xm)    # -- decoding from XML source
-            #root = root.getroot()                 # -- doesn't work with named spaces (F*CK - it never works)
+            #root = root.getroot()                 # -- doesn't work with named spaces (XML it never works as expected)
             ns = root.tag
-            ns = re.sub('}(.*)$','}',ns)           # -- XML Crap: we need to retrieve name space, and reference it below
+            ns = re.sub('}(.*)$','}',ns)           # -- XML non-sense: we need to retrieve name space, and reference it below
             obj = { }
             ps = [ ]
             for o in root.iter(f'{ns}object'):     # -- fetch vertices from all objects
