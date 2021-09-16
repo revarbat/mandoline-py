@@ -179,7 +179,11 @@ class ModelData(object):
         l = fh.readline()
         if not re.search('^OFF',l):
             sys.exit("ERROR: mal-format OFF <{fn}>")
-        while 1:
+        np = nf = ne = 0
+        ma = re.search('OFF\s+(\d+)\s+(\d+)\s+(\d+)',l)          # -- special case: "OFF <p> <f> <e>" on single line
+        if ma:
+           (np,nf,ne) = [int(a) for a in [ma[1],ma[2],ma[3]]]
+        while np == 0:
             l = fh.readline().strip()
             if re.search(r'^\s*#',l): continue
             if re.search(r'^\s*$',l): continue
