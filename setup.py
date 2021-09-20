@@ -4,8 +4,7 @@ import os
 import glob
 from setuptools import setup
 
-VERSION = "0.8.2"
-
+VERSION = "0.8.6"          # HINT: also update version in __init__.py
 
 def find_data_files(source, target, patterns):
     """
@@ -41,7 +40,7 @@ with open('README.rst') as f:
 setup(
     name='mandoline-py',
     version=VERSION,
-    description='An STL to GCode slicer for 3D printing, using the clipper libraries.',
+    description='An STL, OBJ, OFF, 3MF, 3MJ to GCode slicer for 3D printing, using the clipper libraries.',
     long_description=LONG_DESCR,
     author='Revar Desmera',
     author_email='revarbat@gmail.com',
