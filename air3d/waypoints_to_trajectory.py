@@ -34,8 +34,7 @@ def waypoints_to_trajectory(waypoints, command_rate = 10):
     trajectory_dictionary['vel'] = trajectory_vel
     return trajectory_dictionary
 
-
-if __name__ == '__main__':
+def main():
     if len(sys.argv) < 2:
         sys.exit('Must provide waypoints pickle filename')
     fname = sys.argv[1]
@@ -56,3 +55,6 @@ if __name__ == '__main__':
     ### Save trajectory as a pickle file
     with open(fname[:-16]+"trajectory_"+str(COMMAND_RATE)+"Hz.pickle", "wb") as pkl_handle:
 	    pickle.dump(trajectory_dictionary, pkl_handle)
+
+if __name__ == '__main__':
+    main()

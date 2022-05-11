@@ -145,8 +145,7 @@ def gcode_to_waypoints(gcodeFileName):
     waypoint_dictionary['vel'] = timestamped_waypoints[:,4:7]
     return waypoint_dictionary
 
-
-if __name__ == '__main__':
+def main():
     if len(sys.argv) < 2:
         sys.exit('Must provide gcode filename')
     fname = sys.argv[1]
@@ -159,3 +158,6 @@ if __name__ == '__main__':
     ### Save waypoints as a pickle file
     with open(fname[:-6]+"_waypoints.pickle", "wb") as pkl_handle:
 	    pickle.dump(waypoint_dictionary, pkl_handle)
+
+if __name__ == '__main__':
+    main()
