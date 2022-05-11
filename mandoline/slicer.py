@@ -15,38 +15,38 @@ from .TextThermometer import TextThermometer
 
 slicer_configs = OrderedDict([
     ('Quality', (
-        ('layer_height',      float,  0.2, (0.01, 0.5), "Slice layer height in mm."),
-        ('shell_count',       int,      2, (1, 10),     "Number of outer shells to print."),
+        ('layer_height',      float,  50., (0.1, 100.0), "Slice layer height in mm."),
+        ('shell_count',       int,      1, (1, 10),     "Number of outer shells to print."),
         ('random_starts',     bool,   True, None,       "Enable randomizing of perimeter starts."),
-        ('top_layers',        int,      3, (0, 10),     "Number of layers to print on the top side of the object."),
-        ('bottom_layers',     int,      3, (0, 10),     "Number of layers to print on the bottom side of the object."),
-        ('infill_type',       list, 'Grid', ['Lines', 'Triangles', 'Grid', 'Hexagons'], "Pattern that the infill will be printed in."),
-        ('infill_density',    float,  30., (0., 100.),  "Infill density in percent."),
-        ('infill_overlap',    float, 0.15, (0.0, 1.0),  "Amount, in mm that infill will overlap with perimeter extrusions."),
-        ('feed_rate',         int,     60, (1, 300),    "Speed while extruding. (mm/s)"),
+        ('top_layers',        int,      1, (0, 10),     "Number of layers to print on the top side of the object."),
+        ('bottom_layers',     int,      1, (0, 10),     "Number of layers to print on the bottom side of the object."),
+        ('infill_type',       list, 'Triangles', ['Lines', 'Triangles', 'Grid', 'Hexagons'], "Pattern that the infill will be printed in."),
+        ('infill_density',    float,  25., (0., 100.),  "Infill density in percent."),
+        ('infill_overlap',    float,   1., (0.0, 10.0),  "Amount, in mm that infill will overlap with perimeter extrusions."),
+        ('feed_rate',         int,    100, (1, 300),    "Speed while extruding. (mm/s)"),
         ('travel_rate_xy',    int,    100, (1, 300),    "Travel motion speed (mm/s)"),
-        ('travel_rate_z',     float,   5., (0.1, 30.),  "Z-axis  motion speed (mm/s)"),
+        ('travel_rate_z',     float,  50., (0.1, 100.),  "Z-axis  motion speed (mm/s)"),
     )),
     ('Support', (
         ('support_type',      list, 'External', ('None', 'External', 'Everywhere'), "What kind of support structure to add."),
-        ('support_outset',    float,   0.5, (0., 2.),   "How far support structures should be printed away from model, horizontally."),
+        ('support_outset',    float,    2., (0., 2.),   "How far support structures should be printed away from model, horizontally."),
         ('support_density',   float,  33.0, (0., 100.), "Density of support structure internals."),
         ('overhang_angle',    int,      45, (0, 90),    "Angle from vertical that support structures should be printed for."),
     )),
     ('Adhesion', (
         ('adhesion_type',     list, 'None', ('None', 'Brim', 'Raft'), "What kind of base adhesion structure to add."),
-        ('brim_width',        float,  3.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
-        ('raft_layers',       int,      3, (1, 5),      "Number of layers to use in making the raft."),
-        ('raft_outset',       float,  3.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
+        ('brim_width',        float,  0.0, (0., 20.),   "Width of brim to print on first layer to help with part adhesion."),
+        ('raft_layers',       int,      1, (1, 5),      "Number of layers to use in making the raft."),
+        ('raft_outset',       float,  5.0, (0., 50.),   "How much bigger raft should be than the model footprint."),
         ('skirt_outset',      float,  0.0, (0., 20.),   "How far the skirt should be printed away from model."),
         ('skirt_layers',      int,      0, (0, 1000),   "Number of layers to print print the skirt on."),
         ('prime_length',      float, 10.0, (0., 1000.), "Length of filament to extrude when priming hotends."),
     )),
     ('Retraction', (
         ('retract_enable',    bool,   True, None,       "Enable filament retraction."),
-        ('retract_speed',     float,  30.0, (0., 200.), "Speed to retract filament at. (mm/s)"),
-        ('retract_dist',      float,   3.0, (0., 20.),  "Distance to retract filament between extrusion moves. (mm)"),
-        ('retract_extruder',  float,   3.0, (0., 50.),  "Distance to retract filament on extruder change. (mm)"),
+        ('retract_speed',     float,  50.0, (0., 200.), "Speed to retract filament at. (mm/s)"),
+        ('retract_dist',      float,   5.0, (0., 20.),  "Distance to retract filament between extrusion moves. (mm)"),
+        ('retract_extruder',  float,   5.0, (0., 50.),  "Distance to retract filament on extruder change. (mm)"),
         ('retract_lift',      float,   0.0, (0., 10.),  "Distance to lift the extruder head during retracted moves. (mm)"),
     )),
     ('Materials', (
@@ -86,23 +86,23 @@ slicer_configs = OrderedDict([
     )),
     ('Machine', (
         ('bed_geometry',      list, 'Rectangular', ('Rectangular', 'Cylindrical'), "The shape of the build volume cross-section."),
-        ('bed_size_x',        float,  200, (0,1000),    "The X-axis size of the build platform bed."),
-        ('bed_size_y',        float,  200, (0,1000),    "The Y-axis size of the build platform bed."),
-        ('bed_center_x',      float,  100, (-500,500),  "The X coordinate of the center of the bed."),
-        ('bed_center_y',      float,  100, (-500,500),  "The Y coordinate of the center of the bed."),
-        ('bed_temp',          int,     70, (0, 150),    "The temperature to set the heated bed to."),
+        ('bed_size_x',        float,  2000, (0,2000),    "The X-axis size of the build platform bed."),
+        ('bed_size_y',        float,  2000, (0,2000),    "The Y-axis size of the build platform bed."),
+        ('bed_center_x',      float,  1000, (0,2000),  "The X coordinate of the center of the bed."),
+        ('bed_center_y',      float,  1000, (0,2000),  "The Y coordinate of the center of the bed."),
+        ('bed_temp',          int,      70, (0, 150),    "The temperature to set the heated bed to."),
 
         ('extruder_count',    int,      1, (1, 4),      "The number of extruders this machine has."),
         ('default_nozzle',    int,      0, (0, 4),      "The default extruder used for printing."),
         ('infill_nozzle',     int,     -1, (-1, 4),     "The extruder used for infill material.  -1 means use default nozzle."),
         ('support_nozzle',    int,     -1, (-1, 4),     "The extruder used for support material.  -1 means use default nozzle."),
 
-        ('nozzle_0_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
-        ('nozzle_0_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 0. (mm)"),
-        ('nozzle_0_diam',      float,  0.4, (0.1, 1.5),  "The diameter of the nozzle for extruder 0. (mm)"),
-        ('nozzle_0_xoff',      float,  0.0, (-100, 100), "The X positional offset for extruder 0. (mm)"),
-        ('nozzle_0_yoff',      float,  0.0, (-100, 100), "The Y positional offset for extruder 0. (mm)"),
-        ('nozzle_0_max_speed', float, 75.0, (0., 200.),  "The maximum speed when using extruder 0. (mm/s)"),
+        ('nozzle_0_temp',      int,     190, (150, 250),  "The temperature of the nozzle for extruder 0. (C)"),
+        ('nozzle_0_filament',  float,  20.0, (1.0, 50.),  "The diameter of the filament for extruder 0. (mm)"),
+        ('nozzle_0_diam',      float,  10.0, (0.1, 25.),  "The diameter of the nozzle for extruder 0. (mm)"),
+        ('nozzle_0_xoff',      float,   0.0, (-100, 100), "The X positional offset for extruder 0. (mm)"),
+        ('nozzle_0_yoff',      float,   0.0, (-100, 100), "The Y positional offset for extruder 0. (mm)"),
+        ('nozzle_0_max_speed', float, 100.0, (0., 200.),  "The maximum speed when using extruder 0. (mm/s)"),
 
         ('nozzle_1_temp',      int,    190, (150, 250),  "The temperature of the nozzle for extruder 1. (C)"),
         ('nozzle_1_filament',  float, 1.75, (1.0, 3.5),  "The diameter of the filament for extruder 1. (mm)"),
@@ -812,7 +812,7 @@ class Slicer(object):
             from tkinter import (Tk, Canvas, Label, Frame, Scrollbar, mainloop)
             from tkinter.ttk import Progressbar, Style
         self.layer = 0
-        self.mag = 5.0
+        self.mag = 1.0
         self.master = Tk()
         self.master.title("Mandoline - Layer Paths")
         self.info_fr = Frame(self.master, bd=2, relief="flat", bg="#ccc")
@@ -832,7 +832,7 @@ class Slicer(object):
         self.fr.pack(fill="both", expand=True)
         self.fr.grid_rowconfigure(0, weight=1)
         self.fr.grid_columnconfigure(0, weight=1)
-        self.canvas = Canvas(self.fr, width=800, height=600, scrollregion=(0,0,1000,1000))
+        self.canvas = Canvas(self.fr, width=1400, height=1000, scrollregion=(0,0,1000,1000))
         self.hbar = Scrollbar(self.fr, orient="horizontal", command=self.canvas.xview)
         self.vbar = Scrollbar(self.fr, orient="vertical", command=self.canvas.yview)
         self.canvas.config(xscrollcommand=self.hbar.set, yscrollcommand=self.vbar.set)
@@ -860,8 +860,8 @@ class Slicer(object):
         size_y = self.conf['bed_size_y']
         cx = self.conf['bed_center_x']
         cy = self.conf['bed_center_y']
-        neww = (cx-400/self.mag)/size_x
-        newh = (cy-300/self.mag)/size_y
+        neww = (cx-700/self.mag)/size_x
+        newh = (cy-500/self.mag)/size_y
         self.canvas.xview("moveto", neww)
         self.canvas.yview("moveto", newh)
         if platform.system() == "Darwin":
@@ -898,7 +898,7 @@ class Slicer(object):
         maxx = (center_x + size_x/2) * self.mag
         miny = (center_y - size_y/2) * self.mag
         maxy = (center_y + size_y/2) * self.mag
-        self.zoom_lbl.config(text="Zoom: {}%".format(int(self.mag*100/5.0)))
+        self.zoom_lbl.config(text="Zoom: {}%".format(int(self.mag*100/10.0)))
         self.layer_lbl.config(text="Layer: {}/{}".format(layernum, layers-1))
         self.zed_lbl.config(text="Z: {:.3f}".format(self.layer_zs[layernum]))
         self.canvas.delete("all")
