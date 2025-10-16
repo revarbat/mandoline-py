@@ -599,7 +599,7 @@ class Slicer(object):
         rect_bed = bed_geom == 'Rectangular'
         cyl_bed = bed_geom == 'Cylindrical'
         maxlen = (maxy-miny-20) if rect_bed else (2*math.pi*math.sqrt((size_x*size_x)/2)-20)
-        reps = self.conf['prime_length'] / maxlen
+        reps = self.conf['prime_length'] / maxlen if (self.conf['prime_length'] > 0 and maxlen > 0) else 0
         ireps = int(math.ceil(reps))
         for noznum, nozl in enumerate(prime_nozls):
             ewidth = self.extrusion_width * 1.25
@@ -773,6 +773,8 @@ class Slicer(object):
         for line in self._tool_change_gcode(nozl):
             gcode_lines.append(line)
         for path in paths:
+            if not path:
+                continue
             ox, oy = path[0][0:2]
             if retract_lift > 0 or self.last_pos[2] != z:
                 self.total_build_time += abs(retract_lift) / travel_rate_z
